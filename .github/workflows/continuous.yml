@@ -27,9 +27,9 @@ jobs:
       
       - name: Run script continuously
         env:
-          GITHUB_TOKEN_1: ${{ secrets.GITHUB_TOKEN_1 }}
-          GITHUB_TOKEN_2: ${{ secrets.GITHUB_TOKEN_2 }}
-          GITHUB_TOKEN_3: ${{ secrets.GITHUB_TOKEN_3 }}
+          TOKEN_1: ${{ secrets.TOKEN_1 }}
+          TOKEN_2: ${{ secrets.TOKEN_2 }}
+          TOKEN_3: ${{ secrets.TOKEN_3 }}
         run: node script.js
       
       - name: Upload CSV results

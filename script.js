@@ -17,6 +17,17 @@ constructor() {
   this.csvFile = "repositorios_acessibilidade.csv";
   this.processedReposFile = "processed_repos.json";
   this.processedRepos = this.loadProcessedRepos();
+  // Adicionar repositórios pulados do CSV
+  const skippedCsv = '/Users/dtidigital/scriptTCC2/repositorios_pulados.csv';
+  if (fs.existsSync(skippedCsv)) {
+    const lines = fs.readFileSync(skippedCsv, 'utf8').split('\n');
+    for (let i = 1; i < lines.length; i++) { 
+      const repo = lines[i].trim();
+      if (repo) this.processedRepos.add(repo);
+    }
+    this.saveProcessedRepos();
+    console.log(`📋 Adicionados ${lines.length-1} repositórios pulados ao processed_repos.json`);
+  }
   this.perPage = 100;
 
   // Sem controle de tempo interno - o GitHub Actions já controla com timeout-minutes: 35791

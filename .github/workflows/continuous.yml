@@ -1,0 +1,40 @@
+name: Continuous Script Runner
+
+on:
+  workflow_dispatch:
+  push:
+    branches: 
+      - main
+      - master
+    paths:
+      - script.js
+
+jobs:
+  run-forever:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35791
+    
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Install dependencies
+        run: |
+          npm init -y
+          npm install node-fetch@2 dotenv
+      
+      - name: Run script continuously
+        env:
+          GITHUB_TOKEN_1: ${{ secrets.GITHUB_TOKEN_1 }}
+          GITHUB_TOKEN_2: ${{ secrets.GITHUB_TOKEN_2 }}
+          GITHUB_TOKEN_3: ${{ secrets.GITHUB_TOKEN_3 }}
+        run: node script.js
+      
+      - name: Upload CSV results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: repositorios-acessibilidade-csv
+          path: repositorios_acessibilidade.csv

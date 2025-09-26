@@ -21,7 +21,7 @@ class GitHubAccessibilityMiner {
     this.timeoutTriggered = false;
     this.processedRepos = this.loadProcessedRepos();
     // Adicionar repositórios pulados do CSV
-    const skippedCsv = '/Users/dtidigital/scriptTCC2/repositorios_pulados.csv';
+    const skippedCsv = 'repositorios_pulados.csv';
     if (fs.existsSync(skippedCsv)) {
       const lines = fs.readFileSync(skippedCsv, 'utf8').split('\n');
       for (let i = 1; i < lines.length; i++) {

@@ -658,7 +658,7 @@ class GitHubAccessibilityMiner {
       "installation",
       "import ",
       "require(",
-      "hotwired",
+      "Turbo Drive",
     ];
 
     // Padrões no nome que indicam bibliotecas

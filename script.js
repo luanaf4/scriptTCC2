@@ -586,6 +586,7 @@ class GitHubAccessibilityMiner {
       readmeContent.includes("lib") ||
       readmeContent.includes("gui") ||
       readmeContent.includes("graphical user interface")
+      readmeContent.includes("Turbo Drive")
     ) {
       console.log(`   📚 Biblioteca/GUI detectada no README`);
       return true;

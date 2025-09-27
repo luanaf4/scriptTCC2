@@ -658,6 +658,7 @@ class GitHubAccessibilityMiner {
       "installation",
       "import ",
       "require(",
+      "hotwired",
     ];
 
     // Padrões no nome que indicam bibliotecas

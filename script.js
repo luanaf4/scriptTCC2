@@ -14,14 +14,14 @@ class GitHubAccessibilityMiner {
     this.tokenLimits = Array(this.tokens.length).fill(null);
     this.graphqlUrl = "https://api.github.com/graphql";
     this.restUrl = "https://api.github.com";
-    this.csvFile = "repositorios_acessibilidade.csv";
+    this.csvFile = "repositorios_acessibilidadeNO.csv";
     this.processedReposFile = "processed_repos.json";
     this.statsCsvFile = "stats.csv";
     this.maxRunMillis = (5 * 60 + 59) * 60 * 1000; // 5h59min em ms
     this.timeoutTriggered = false;
     this.processedRepos = this.loadProcessedRepos();
     // Adicionar repositórios pulados do CSV
-    const skippedCsv = 'repositorios_pulados.csv';
+    const skippedCsv = 'NO/repositorios_pulados.csv';
     if (fs.existsSync(skippedCsv)) {
       const lines = fs.readFileSync(skippedCsv, 'utf8').split('\n');
       for (let i = 1; i < lines.length; i++) {
@@ -482,6 +482,16 @@ class GitHubAccessibilityMiner {
       }
     } catch (e) {
       // Sem README, segue sem ele
+    }
+
+    // Se o README mencionar "library", "biblioteca" ou "lib", pular
+    if (
+      readmeContent.includes("library") ||
+      readmeContent.includes("biblioteca") ||
+      readmeContent.includes("lib")
+    ) {
+      console.log(`   📚 Biblioteca detectada no README`);
+      return true;
     }
 
     // 🔹 Combina tudo para análise

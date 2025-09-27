@@ -14,14 +14,14 @@ class GitHubAccessibilityMiner {
     this.tokenLimits = Array(this.tokens.length).fill(null);
     this.graphqlUrl = "https://api.github.com/graphql";
     this.restUrl = "https://api.github.com";
-    this.csvFile = "repositorios_acessibilidadeNO.csv";
+    this.csvFile = "repositorios_acessibilidade.csv";
     this.processedReposFile = "processed_repos.json";
     this.statsCsvFile = "stats.csv";
     this.maxRunMillis = (5 * 60 + 59) * 60 * 1000; // 5h59min em ms
     this.timeoutTriggered = false;
     this.processedRepos = this.loadProcessedRepos();
     // Adicionar repositórios pulados do CSV
-    const skippedCsv = 'NO/repositorios_pulados.csv';
+    const skippedCsv = '/Users/dtidigital/scriptTCC2/repositorios_pulados.csv';
     if (fs.existsSync(skippedCsv)) {
       const lines = fs.readFileSync(skippedCsv, 'utf8').split('\n');
       for (let i = 1; i < lines.length; i++) {
@@ -484,13 +484,110 @@ class GitHubAccessibilityMiner {
       // Sem README, segue sem ele
     }
 
-    // Se o README mencionar "library", "biblioteca" ou "lib", pular
+    // --- FILTRO GENÉRICO PARA BIBLIOTECAS/FRAMEWORKS E GUI ---
+    if (readmeContent) {
+      const firstLines = readmeContent.split('\n').slice(0, 15).join(' ');
+      // Palavras/frases que indicam biblioteca/framework/GUI
+      const libIndicators = [
+        "is a library",
+        "is a framework",
+        "component library",
+        "ui library",
+        "framework for",
+        "toolkit for",
+        "library for",
+        "framework that",
+        "toolkit that",
+        "for building",
+        "for developers",
+        "for use in",
+        "for your app",
+        "for your application",
+        "for other apps",
+        "for other applications",
+        "for other projects",
+        "npm package",
+        "node module",
+        "react library",
+        "vue library",
+        "angular library",
+        "plugin for",
+        "extension for",
+        "utility library",
+        "utility for",
+        "utilities for",
+        "utilities to",
+        "boilerplate for",
+        "template for",
+        "starter kit for",
+        "starter template for",
+        "seed for",
+        "scaffold for",
+        "wrapper for",
+        "binding for",
+        "polyfill for",
+        "shim for",
+        "mock for",
+        "stub for",
+        "collection of components",
+        "collection of utilities",
+        "collection of helpers",
+        "collection of plugins",
+        "collection of extensions",
+        "collection of modules",
+        "collection of packages",
+        "collection of libraries",
+        "collection of frameworks",
+        "collection of templates",
+        "collection of boilerplates",
+        "collection of starters",
+        "collection of seeds",
+        "collection of scaffolds",
+        "collection of wrappers",
+        "collection of bindings",
+        "collection of polyfills",
+        "collection of shims",
+        "collection of mocks",
+        "collection of stubs",
+        "gui",
+        "graphical user interface"
+      ];
+      // Palavras/frases que indicam aplicação web para usuário final
+      const appIndicators = [
+        "this is a web application",
+        "live demo",
+        "try it online",
+        "end-user",
+        "production site",
+        "hosted at",
+        "visit the app",
+        "visit the website",
+        "online demo",
+        "user-facing",
+        "public site",
+        "web app for",
+        "web application for",
+        "website for",
+        "application for users",
+        "app for users"
+      ];
+      const isLib = libIndicators.some(phrase => firstLines.includes(phrase));
+      const isApp = appIndicators.some(phrase => firstLines.includes(phrase));
+      if (isLib && !isApp) {
+        console.log(`   📚 Biblioteca/framework/GUI detectada por frases genéricas no início do README`);
+        return true;
+      }
+    }
+
+    // Se o README mencionar "library", "biblioteca", "lib" ou "gui", pular
     if (
       readmeContent.includes("library") ||
       readmeContent.includes("biblioteca") ||
-      readmeContent.includes("lib")
+      readmeContent.includes("lib") ||
+      readmeContent.includes("gui") ||
+      readmeContent.includes("graphical user interface")
     ) {
-      console.log(`   📚 Biblioteca detectada no README`);
+      console.log(`   📚 Biblioteca/GUI detectada no README`);
       return true;
     }
 
@@ -1004,11 +1101,27 @@ class GitHubAccessibilityMiner {
     );
 
     try {
+      // Buscar data do último commit do branch padrão
+      let lastCommitDate = "";
+      try {
+        const defaultBranch =
+          (repo.defaultBranchRef && repo.defaultBranchRef.name) ||
+          repo.default_branch ||
+          "main";
+        const commitsApi = `${this.restUrl}/repos/${owner}/${name}/commits?sha=${defaultBranch}&per_page=1`;
+        const commits = await this.makeRestRequest(commitsApi);
+        if (Array.isArray(commits) && commits.length > 0 && commits[0].commit && commits[0].commit.author && commits[0].commit.author.date) {
+          lastCommitDate = commits[0].commit.author.date;
+        }
+      } catch (e) {
+        // fallback para updatedAt se não conseguir pegar commit
+        lastCommitDate = repo.updatedAt || repo.updated_at || "";
+      }
+
       // Verificar se é muito antigo
       const oneYearAgo = new Date();
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      const lastUpdateStr = repo.updatedAt || repo.updated_at || null;
-      const lastUpdate = lastUpdateStr ? new Date(lastUpdateStr) : null;
+      const lastUpdate = lastCommitDate ? new Date(lastCommitDate) : null;
 
       if (lastUpdate && lastUpdate < oneYearAgo) {
         console.log(`   📅 Muito antigo, pulando...`);
@@ -1058,7 +1171,7 @@ class GitHubAccessibilityMiner {
         return {
           repository: fullName,
           stars: repo.stargazerCount || repo.stargazers_count || 0,
-          lastCommit: repo.updatedAt || repo.updated_at || "",
+          lastCommit: lastCommitDate,
           ...foundTools,
         };
       }

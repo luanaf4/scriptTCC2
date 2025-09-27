@@ -14,7 +14,7 @@ class GitHubAccessibilityMiner {
     this.tokenLimits = Array(this.tokens.length).fill(null);
     this.graphqlUrl = "https://api.github.com/graphql";
     this.restUrl = "https://api.github.com";
-    this.csvFile = "repositorios_acessibilidadeNO.csv";
+    this.csvFile = "repositorios_acessibilidade.csv";
     this.processedReposFile = "processed_repos.json";
     this.statsCsvFile = "stats.csv";
     this.maxRunMillis = (5 * 60 + 59) * 60 * 1000; // 5h59min em ms

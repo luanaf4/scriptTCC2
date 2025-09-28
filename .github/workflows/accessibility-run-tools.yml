@@ -64,33 +64,38 @@ jobs:
       - name: Clone and setup local AChecker
         run: |
           git clone https://github.com/inclusive-design/AChecker.git achecker
-          cat > achecker/include/config.inc.php <<'EOF'
-          <?php
-          define('DB_HOST', 'mysql');
-          define('DB_PORT', '3306');
-          define('DB_NAME', 'achecker');
-          define('DB_USER', 'achecker');
-          define('DB_PASSWORD', 'password');
-          define('TABLE_PREFIX', '');
-          define('MYSQLI_ENABLED', true);
-          define('ACHECKER_VERSION', '1.4');
-          ?>
-          EOF
           cd achecker
           composer install
           cd ..
-          # Espera MySQL estar pronto
+          php -S 0.0.0.0:8000 -t achecker &
           until mysqladmin ping -h mysql --silent; do
             echo "⏳ Aguardando MySQL..."
             sleep 2
           done
-          mysql -h mysql -u root -proot achecker < achecker/install/achecker.sql
-          php -S 0.0.0.0:8000 -t achecker &
+          echo "⚙️ Instalando AChecker via instalador web..."
+          curl -s -X POST "http://localhost:8000/install/install.php" \
+            -d "db_host=mysql" \
+            -d "db_port=3306" \
+            -d "db_name=achecker" \
+            -d "db_user=achecker" \
+            -d "db_pass=password" \
+            -d "admin_email=admin@example.com" \
+            -d "admin_password=admin" \
+            -d "admin_password2=admin" \
+            -d "submit=Install"
+
+          echo "🔍 Verificando se tabelas foram criadas..."
+          TABLE_COUNT=$(mysql -h mysql -u root -proot -e "USE achecker; SHOW TABLES;" | wc -l)
+          if [ "$TABLE_COUNT" -le 1 ]; then
+            echo "⚠️ AChecker não instalado corretamente. Ele será ignorado nos testes."
+            echo "ACHECKER_SKIP=1" >> $GITHUB_ENV
+          else
+            echo "✅ Banco de dados do AChecker criado com sucesso."
+            echo "ACHECKER_SKIP=0" >> $GITHUB_ENV
+          fi
 
       - name: Run accessibility tools
         run: |
-          # Ajuste no Lighthouse para evitar erro de múltiplos --output-path
-          sed -i 's/npx lighthouse \(.*\) --quiet --output=json --output-path=lh.json --output=html --output-path=lh.html --timeout=60000/npx lighthouse \1 --quiet --output=json --output-path=lh.json --timeout=60000 \n npx lighthouse \1 --quiet --output=html --output-path=lh.html --timeout=60000/' run-tests.js
           node run-tests.js "${{ github.event.inputs.repo_name }}" "${{ github.event.inputs.url_app }}" "${{ github.event.inputs.tools }}"
 
       - name: Upload CSV results

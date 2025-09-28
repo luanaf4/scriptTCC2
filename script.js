@@ -521,7 +521,8 @@ class GitHubAccessibilityMiner {
 
     // --- FILTRO GENÉRICO PARA BIBLIOTECAS/FRAMEWORKS E GUI ---
     if (readmeContent) {
-      const firstLines = readmeContent.split('\n').slice(0, 15).join(' ');
+      const firstLinesArr = readmeContent.split('\n').slice(0, 15);
+      const firstLines = firstLinesArr.join(' ');
       // Palavras/frases que indicam biblioteca/framework/GUI
       const libIndicators = [
         "is a library",
@@ -612,6 +613,24 @@ class GitHubAccessibilityMiner {
         console.log(`   📚 Biblioteca/framework/GUI detectada por frases genéricas no início do README`);
         return true;
       }
+    }
+
+    // --- NOVO CRITÉRIO: só considerar docs/tutorial/demo/example/guide como biblioteca se predominante no início do README e não houver menção clara a webapp ---
+    const docsTutorialWords = [
+      "documentation", "docs", "tutorial", "example", "demo", "sample", "guide"
+    ];
+    const webAppMentions = [
+      "web interface", "web application", "webapp", "dashboard", "website", "web portal", "web client", "web ui", "web-based", "web front-end", "web frontend"
+    ];
+    // Checar predominância de docs/tutorial/demo/example/guide no início do README
+    const first20Lines = readmeContent.split('\n').slice(0, 20).join(' ');
+    const docsMentions = docsTutorialWords.filter(word => first20Lines.includes(word));
+    const webMentions = webAppMentions.filter(word => first20Lines.includes(word));
+    // Considera predominante se pelo menos 2 dessas palavras aparecem nas primeiras 20 linhas
+    const docsPredominant = docsMentions.length >= 2 || (docsMentions.length === 1 && first20Lines.length < 400);
+    if (docsPredominant && webMentions.length === 0) {
+      console.log(`   📚 README predominantemente docs/tutorial/demo/example/guide e sem menção clara a webapp`);
+      return true;
     }
 
     // 🔹 Combina tudo para análise
@@ -768,28 +787,11 @@ class GitHubAccessibilityMiner {
       combinedText.includes("collection of") ||
       combinedText.includes("list of");
 
-    // Verificar se é documentação, tutorial ou exemplo
-    const isDocsOrTutorial =
-      combinedText.includes("documentation") ||
-      combinedText.includes("tutorial") ||
-      combinedText.includes("example") ||
-      combinedText.includes("demo") ||
-      combinedText.includes("sample") ||
-      combinedText.includes("guide");
-
-    // Verificar repositórios de configuração ou dotfiles
-    const isConfigRepo =
-      combinedText.includes("dotfiles") ||
-      combinedText.includes("config") ||
-      combinedText.includes("settings") ||
-      combinedText.includes("configuration");
-
     // CRITÉRIOS DE EXCLUSÃO (é biblioteca se):
     const isLibrary =
       hasLibraryNamePattern ||
       (hasStrongLibraryKeywords && !hasAppKeywords) ||
       isAwesomeList ||
-      isDocsOrTutorial ||
       isConfigRepo;
 
     // Log para debug
@@ -799,8 +801,6 @@ class GitHubAccessibilityMiner {
       if (hasStrongLibraryKeywords && !hasAppKeywords)
         reasons.push("palavras de biblioteca");
       if (isAwesomeList) reasons.push("lista awesome");
-      if (isDocsOrTutorial) reasons.push("docs/tutorial");
-      if (isConfigRepo) reasons.push("configuração");
       if (readmeContent) reasons.push("README indica biblioteca");
       console.log(
         `   📚 Biblioteca detectada (${reasons.join(", ")}): ${repo.full_name || repo.nameWithOwner || ""}`

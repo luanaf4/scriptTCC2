@@ -134,11 +134,11 @@ try {
     return { violacoes: data.summary.NumOfErrors, erros: data.resultset?.map(e => e.error_id) || [], ...levels };
   } catch {
     console.error("❌ AChecker retornou HTML em vez de JSON — provavelmente não instalado.");
-    return { violacoes: 0, erros: [], nivelA: 0, nivelAA: 0, nivelAAA: 0, indefinido: 0 };
+    return null; // Retorna null para indicar que não deve entrar no CSV
   }
 } catch (err) {
   console.error(`❌ Erro no AChecker: ${err.message}`);
-  return { violacoes: 0, erros: [], nivelA: 0, nivelAA: 0, nivelAAA: 0, indefinido: 0 };
+  return null;
 }
 }
 
@@ -197,16 +197,28 @@ if (!urlApp) {
 for (const tool of tools) {
   try {
     let res;
-    if (tool === 'AXE') res = await runAxe(urlApp);
-    else if (tool === 'Lighthouse') res = await runLighthouse(urlApp);
-    else if (tool === 'AChecker') {
+    if (tool === 'AXE') {
+      res = await runAxe(urlApp);
+    } else if (tool === 'Lighthouse') {
+      res = await runLighthouse(urlApp);
+    } else if (tool === 'AChecker') {
+      if (process.env.ACHECKER_SKIP === '1') {
+        console.warn("⚠️ AChecker foi ignorado porque não foi instalado corretamente.");
+        continue;
+      }
       const ready = await waitForAChecker('http://localhost:8000/checkacc.php?uri=https://example.com&output=json');
       if (!ready) {
         console.error("❌ AChecker não respondeu, pulando...");
         continue;
       }
       res = await runACheckerLocal(urlApp);
-    } else continue;
+      if (res === null) {
+        console.warn("⚠️ AChecker não retornou dados válidos, ignorando.");
+        continue;
+      }
+    } else {
+      continue;
+    }
 
     res.erros.forEach(e => allErrorsSet.add(e));
     results.push({

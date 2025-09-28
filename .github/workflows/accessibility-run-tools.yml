@@ -1,0 +1,66 @@
+name: Accessibility Single Repo Test
+
+on:
+workflow_dispatch:
+  inputs:
+    repo_name:
+      description: 'Nome do repositório no formato usuario/repositorio'
+      required: true
+    url_app:
+      description: 'URL pública da aplicação (deixe vazio se não houver)'
+      required: false
+    tools:
+      description: 'Ferramentas para rodar (ex: AXE,Lighthouse,WAVE,AChecker)'
+      required: true
+      default: 'AXE,Lighthouse,WAVE,AChecker'
+
+jobs:
+run-tests:
+  runs-on: ubuntu-latest
+
+  steps:
+    - name: Checkout workflow repo
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y php php-mysql mysql-server unzip
+        npm install axe-core puppeteer lighthouse node-fetch csv-writer serve detect-port
+
+    - name: Download WAVE extension
+      run: |
+        mkdir wave-extension
+        curl -L -o wave-extension.zip https://wave.webaim.org/extension-chrome.zip
+        unzip wave-extension.zip -d wave-extension
+
+    - name: Setup local AChecker
+      run: |
+        git clone https://github.com/inclusivedesign/AChecker.git achecker
+        sudo service mysql start
+        mysql -e "CREATE DATABASE achecker; CREATE USER 'achecker'@'localhost' IDENTIFIED BY 'password'; GRANT ALL PRIVILEGES ON achecker.* TO 'achecker'@'localhost'; FLUSH PRIVILEGES;"
+        php -S localhost:8000 -t achecker &
+
+    - name: Run accessibility tools
+      run: |
+        node run-tests-local-achecker.js "${{ github.event.inputs.repo_name }}" "${{ github.event.inputs.url_app }}" "${{ github.event.inputs.tools }}"
+
+    - name: Upload CSV results
+      uses: actions/upload-artifact@v4
+      with:
+        name: accessibility-results
+        path: resultados_acessibilidade.csv
+
+    - name: Upload raw WAVE and Lighthouse results
+      uses: actions/upload-artifact@v4
+      with:
+        name: raw-results
+        path: |
+          wave-result-*.html
+          lighthouse-result-*.json
+          lighthouse-result-*.html

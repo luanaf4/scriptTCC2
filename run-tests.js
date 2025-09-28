@@ -88,33 +88,58 @@ return null;
 
 async function runAxe(url) {
 console.log(`🚀 Iniciando AXE em ${url}`);
-const browser = await puppeteer.launch({ headless: 'new' });
-const page = await browser.newPage();
-await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
-const axeSource = fs.readFileSync(require.resolve('axe-core'), 'utf8');
-await page.evaluate(axeSource);
-const results = await page.evaluate(async () => await axe.run());
-await browser.close();
-const levels = classifyByLevel(results.violations, v => v.tags.join(' '));
-return { violacoes: results.violations.length, erros: results.violations.map(v => v.id), ...levels };
+try {
+  const browser = await puppeteer.launch({ headless: 'new' });
+  const page = await browser.newPage();
+  await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+  const axeSource = fs.readFileSync(require.resolve('axe-core'), 'utf8');
+  await page.evaluate(axeSource);
+  const results = await page.evaluate(async () => await axe.run());
+  await browser.close();
+  const levels = classifyByLevel(results.violations, v => v.tags.join(' '));
+  return { violacoes: results.violations.length, erros: results.violations.map(v => v.id), ...levels };
+} catch (err) {
+  console.error(`❌ Erro no AXE/Puppeteer: ${err.message}`);
+  return { violacoes: 0, erros: [], nivelA: 0, nivelAA: 0, nivelAAA: 0, indefinido: 0 };
+}
 }
 
 async function runLighthouse(url) {
 console.log(`🚀 Iniciando Lighthouse em ${url}`);
-execSync(`npx lighthouse ${url} --quiet --output=json --output-path=lh.json --output=html --output-path=lh.html --timeout=60000`, { stdio: 'inherit' });
-const lhJson = fs.readFileSync('lh.json', 'utf8');
-const lh = JSON.parse(lhJson);
-const failed = Object.values(lh.audits).filter(a => a.score === 0);
-const levels = classifyByLevel(failed, a => a.description || '');
-return { violacoes: failed.length, erros: failed.map(a => a.id), ...levels };
+try {
+  // JSON
+  execSync(`npx lighthouse ${url} --quiet --output=json --output-path=lh.json --timeout=60000`, { stdio: 'inherit' });
+  // HTML
+  execSync(`npx lighthouse ${url} --quiet --output=html --output-path=lh.html --timeout=60000`, { stdio: 'inherit' });
+
+  const lhJson = fs.readFileSync('lh.json', 'utf8');
+  const lh = JSON.parse(lhJson);
+  const failed = Object.values(lh.audits).filter(a => a.score === 0);
+  const levels = classifyByLevel(failed, a => a.description || '');
+  return { violacoes: failed.length, erros: failed.map(a => a.id), ...levels };
+} catch (err) {
+  console.error(`❌ Erro no Lighthouse: ${err.message}`);
+  return { violacoes: 0, erros: [], nivelA: 0, nivelAA: 0, nivelAAA: 0, indefinido: 0 };
+}
 }
 
 async function runACheckerLocal(url) {
 console.log(`🚀 Iniciando AChecker em ${url}`);
-const res = await fetch(`http://localhost:8000/checkacc.php?uri=${encodeURIComponent(url)}&output=json`);
-const data = await res.json();
-const levels = classifyByLevel(data.resultset || [], e => e.guideline || '');
-return { violacoes: data.summary.NumOfErrors, erros: data.resultset?.map(e => e.error_id) || [], ...levels };
+try {
+  const res = await fetch(`http://localhost:8000/checkacc.php?uri=${encodeURIComponent(url)}&output=json`);
+  const text = await res.text();
+  try {
+    const data = JSON.parse(text);
+    const levels = classifyByLevel(data.resultset || [], e => e.guideline || '');
+    return { violacoes: data.summary.NumOfErrors, erros: data.resultset?.map(e => e.error_id) || [], ...levels };
+  } catch {
+    console.error("❌ AChecker retornou HTML em vez de JSON — provavelmente não instalado.");
+    return { violacoes: 0, erros: [], nivelA: 0, nivelAA: 0, nivelAAA: 0, indefinido: 0 };
+  }
+} catch (err) {
+  console.error(`❌ Erro no AChecker: ${err.message}`);
+  return { violacoes: 0, erros: [], nivelA: 0, nivelAA: 0, nivelAAA: 0, indefinido: 0 };
+}
 }
 
 (async () => {

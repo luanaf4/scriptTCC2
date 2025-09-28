@@ -479,9 +479,15 @@ class GitHubAccessibilityMiner {
       const readme = await this.getReadmeContent(owner, repo.name || repo.nameWithOwner);
       if (readme) {
         readmeContent = (readme || "").toLowerCase();
+      } else {
+        // README não encontrado: pule o repositório
+        console.log(`   ⚠️ README não encontrado, pulando repositório por segurança`);
+        return true;
       }
     } catch (e) {
-      // Sem README, segue sem ele
+      // Erro ao buscar README: pule o repositório
+      console.log(`   ⚠️ Erro ao buscar README, pulando repositório por segurança`);
+      return true;
     }
 
     if (

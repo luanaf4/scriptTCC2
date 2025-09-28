@@ -32,27 +32,6 @@ errors.forEach(err => {
 return { nivelA, nivelAA, nivelAAA, indefinido };
 }
 
-async function waitForAChecker(url, timeoutMs = 60000, intervalMs = 2000) {
-console.log(`⏳ Aguardando AChecker iniciar em ${url} ...`);
-const start = Date.now();
-
-while (Date.now() - start < timeoutMs) {
-  try {
-    const res = await fetch(url);
-    if (res.ok) {
-      console.log(`✅ AChecker está pronto!`);
-      return true;
-    }
-  } catch (err) {
-    console.log(`... ainda aguardando AChecker (${err.message})`);
-  }
-  await new Promise(resolve => setTimeout(resolve, intervalMs));
-}
-
-console.error(`❌ Timeout: AChecker não respondeu em ${timeoutMs / 1000} segundos`);
-return false;
-}
-
 async function detectLocalUrl() {
 const portasComuns = [3000, 5000, 8080];
 for (const porta of portasComuns) {
@@ -89,7 +68,10 @@ return null;
 async function runAxe(url) {
 console.log(`🚀 Iniciando AXE em ${url}`);
 try {
-  const browser = await puppeteer.launch({ headless: 'new' });
+  const browser = await puppeteer.launch({
+    headless: 'new',
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
   const page = await browser.newPage();
   await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
   const axeSource = fs.readFileSync(require.resolve('axe-core'), 'utf8');
@@ -107,10 +89,8 @@ try {
 async function runLighthouse(url) {
 console.log(`🚀 Iniciando Lighthouse em ${url}`);
 try {
-  // JSON
-  execSync(`npx lighthouse ${url} --quiet --output=json --output-path=lh.json --timeout=60000`, { stdio: 'inherit' });
-  // HTML
-  execSync(`npx lighthouse ${url} --quiet --output=html --output-path=lh.html --timeout=60000`, { stdio: 'inherit' });
+  execSync(`npx lighthouse ${url} --quiet --no-sandbox --output=json --output-path=lh.json --timeout=60000`, { stdio: 'inherit', env: { ...process.env, CHROME_PATH: process.env.CHROME_PATH } });
+  execSync(`npx lighthouse ${url} --quiet --no-sandbox --output=html --output-path=lh.html --timeout=60000`, { stdio: 'inherit', env: { ...process.env, CHROME_PATH: process.env.CHROME_PATH } });
 
   const lhJson = fs.readFileSync('lh.json', 'utf8');
   const lh = JSON.parse(lhJson);
@@ -120,25 +100,6 @@ try {
 } catch (err) {
   console.error(`❌ Erro no Lighthouse: ${err.message}`);
   return { violacoes: 0, erros: [], nivelA: 0, nivelAA: 0, nivelAAA: 0, indefinido: 0 };
-}
-}
-
-async function runACheckerLocal(url) {
-console.log(`🚀 Iniciando AChecker em ${url}`);
-try {
-  const res = await fetch(`http://localhost:8000/checkacc.php?uri=${encodeURIComponent(url)}&output=json`);
-  const text = await res.text();
-  try {
-    const data = JSON.parse(text);
-    const levels = classifyByLevel(data.resultset || [], e => e.guideline || '');
-    return { violacoes: data.summary.NumOfErrors, erros: data.resultset?.map(e => e.error_id) || [], ...levels };
-  } catch {
-    console.error("❌ AChecker retornou HTML em vez de JSON — provavelmente não instalado.");
-    return null; // Retorna null para indicar que não deve entrar no CSV
-  }
-} catch (err) {
-  console.error(`❌ Erro no AChecker: ${err.message}`);
-  return null;
 }
 }
 
@@ -201,21 +162,6 @@ for (const tool of tools) {
       res = await runAxe(urlApp);
     } else if (tool === 'Lighthouse') {
       res = await runLighthouse(urlApp);
-    } else if (tool === 'AChecker') {
-      if (process.env.ACHECKER_SKIP === '1') {
-        console.warn("⚠️ AChecker foi ignorado porque não foi instalado corretamente.");
-        continue;
-      }
-      const ready = await waitForAChecker('http://localhost:8000/checkacc.php?uri=https://example.com&output=json');
-      if (!ready) {
-        console.error("❌ AChecker não respondeu, pulando...");
-        continue;
-      }
-      res = await runACheckerLocal(urlApp);
-      if (res === null) {
-        console.warn("⚠️ AChecker não retornou dados válidos, ignorando.");
-        continue;
-      }
     } else {
       continue;
     }

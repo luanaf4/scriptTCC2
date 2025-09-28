@@ -1,4 +1,4 @@
-name: Accessibility Single Repo Test (PHP 7.4 + Node 18)
+name: Accessibility Single Repo Test
 
 on:
   workflow_dispatch:
@@ -52,9 +52,9 @@ jobs:
           node -v
           npm -v
 
-      - name: Install Node.js dependencies
+      - name: Install Node.js dependencies (with node-fetch@2)
         run: |
-          npm install axe-core puppeteer lighthouse node-fetch csv-writer serve detect-port
+          npm install axe-core puppeteer lighthouse node-fetch@2 csv-writer serve detect-port
 
       - name: Clone and setup local AChecker
         run: |

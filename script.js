@@ -261,9 +261,17 @@ class GitHubAccessibilityMiner {
     const rateLimit = parseInt(response.headers.get("x-ratelimit-remaining"));
     const resetTime = parseInt(response.headers.get("x-ratelimit-reset"));
     this.tokenLimits[this.tokenIndex] = rateLimit;
+
+    // Trocar de token se o rate limit estiver baixo
+    if (rateLimit < 100 && this.tokens.length > 1) {
+      this.nextToken();
+      this.tokenLimits[this.tokenIndex] = null;
+      console.log(`🔄 Trocando para o próximo token (GraphQL), rate limit baixo: ${rateLimit}`);
+    }
+
     this.switchTokenIfNeeded(rateLimit);
 
-    if (rateLimit < 100) {
+    if (rateLimit < 100 && this.tokens.length <= 1) {
       const waitTime = Math.max(resetTime * 1000 - Date.now() + 5000, 0);
       console.log(
         `⏳ Rate limit baixo (${rateLimit}), aguardando ${Math.ceil(
@@ -300,9 +308,17 @@ class GitHubAccessibilityMiner {
     const rateLimit = parseInt(response.headers.get("x-ratelimit-remaining"));
     const resetTime = parseInt(response.headers.get("x-ratelimit-reset"));
     this.tokenLimits[this.tokenIndex] = rateLimit;
+
+    // Trocar de token se o rate limit estiver baixo
+    if (rateLimit < 50 && this.tokens.length > 1) {
+      this.nextToken();
+      this.tokenLimits[this.tokenIndex] = null;
+      console.log(`🔄 Trocando para o próximo token (REST), rate limit baixo: ${rateLimit}`);
+    }
+
     this.switchTokenIfNeeded(rateLimit);
 
-    if (rateLimit < 50) {
+    if (rateLimit < 50 && this.tokens.length <= 1) {
       const waitTime = Math.max(resetTime * 1000 - Date.now() + 5000, 0);
       console.log(
         `⏳ Rate limit REST baixo (${rateLimit}), aguardando ${Math.ceil(
@@ -310,10 +326,6 @@ class GitHubAccessibilityMiner {
         )}s...`
       );
       await new Promise((resolve) => setTimeout(resolve, waitTime));
-    }
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
     return await response.json();

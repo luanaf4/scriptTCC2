@@ -61,13 +61,27 @@ jobs:
         run: |
           npm install axe-core puppeteer lighthouse node-fetch@2 csv-writer serve detect-port
 
-      - name: Clone and setup local AChecker
+      - name: Clone AChecker and install PHP deps
         run: |
           git clone https://github.com/inclusive-design/AChecker.git achecker
           cd achecker
           composer install
           cd ..
-          php -S 0.0.0.0:8000 -t achecker &
+
+      - name: Start PHP server for AChecker
+        run: |
+          nohup php -S 0.0.0.0:8000 -t achecker > php-server.log 2>&1 &
+          echo "⏳ Aguardando servidor PHP iniciar..."
+          for i in {1..10}; do
+            if curl -s http://localhost:8000 > /dev/null; then
+              echo "✅ Servidor PHP pronto!"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Install AChecker via web installer
+        run: |
           until mysqladmin ping -h mysql --silent; do
             echo "⏳ Aguardando MySQL..."
             sleep 2

@@ -24,9 +24,6 @@ jobs:
         run: |
           npm init -y
           npm install node-fetch@2 dotenv
-
-      - name: Remover CSV antigo
-        run: rm -f repositorios_acessibilidade.csv
       
       - name: Run script continuously
         env:

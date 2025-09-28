@@ -10,30 +10,15 @@ on:
         description: 'URL pública da aplicação (deixe vazio se não houver)'
         required: false
       tools:
-        description: 'Ferramentas para rodar (ex: AXE,Lighthouse,AChecker)'
+        description: 'Ferramentas para rodar (ex: AXE,Lighthouse)'
         required: true
-        default: 'AXE,Lighthouse,AChecker'
+        default: 'AXE,Lighthouse'
 
 jobs:
   run-tests:
     runs-on: ubuntu-latest
     container:
       image: php:7.4-cli
-    services:
-      mysql:
-        image: mysql:5.7
-        env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: achecker
-          MYSQL_USER: achecker
-          MYSQL_PASSWORD: password
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping -h localhost"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=3
 
     steps:
       - name: Checkout workflow repo
@@ -42,12 +27,14 @@ jobs:
       - name: Install system dependencies
         run: |
           apt-get update
-          apt-get install -y git unzip curl default-mysql-client \
+          apt-get install -y git unzip curl default-mysql-client chromium \
             libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
             libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
             libxrandr2 libgbm1 libasound2 libpangocairo-1.0-0 libpango-1.0-0 \
             libgtk-3-0 libx11-xcb1 libxrender1 libxcursor1 libxi6 libxtst6 \
             libxss1 libxshmfence1
+          export CHROME_PATH=$(which chromium)
+          echo "CHROME_PATH=$(which chromium)" >> $GITHUB_ENV
           curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
       - name: Install Node.js 18
@@ -60,53 +47,6 @@ jobs:
       - name: Install Node.js dependencies (with node-fetch@2)
         run: |
           npm install axe-core puppeteer lighthouse node-fetch@2 csv-writer serve detect-port
-
-      - name: Clone AChecker and install PHP deps
-        run: |
-          git clone https://github.com/inclusive-design/AChecker.git achecker
-          cd achecker
-          composer install
-          cd ..
-
-      - name: Start PHP server for AChecker
-        run: |
-          nohup php -S 0.0.0.0:8000 -t achecker > php-server.log 2>&1 &
-          echo "⏳ Aguardando servidor PHP iniciar..."
-          for i in {1..10}; do
-            if curl -s http://localhost:8000 > /dev/null; then
-              echo "✅ Servidor PHP pronto!"
-              break
-            fi
-            sleep 2
-          done
-
-      - name: Install AChecker via web installer
-        run: |
-          until mysqladmin ping -h mysql --silent; do
-            echo "⏳ Aguardando MySQL..."
-            sleep 2
-          done
-          echo "⚙️ Instalando AChecker via instalador web..."
-          curl -s -X POST "http://localhost:8000/install/install.php" \
-            -d "db_host=mysql" \
-            -d "db_port=3306" \
-            -d "db_name=achecker" \
-            -d "db_user=achecker" \
-            -d "db_pass=password" \
-            -d "admin_email=admin@example.com" \
-            -d "admin_password=admin" \
-            -d "admin_password2=admin" \
-            -d "submit=Install"
-
-          echo "🔍 Verificando se tabelas foram criadas..."
-          TABLE_COUNT=$(mysql -h mysql -u root -proot -e "USE achecker; SHOW TABLES;" | wc -l)
-          if [ "$TABLE_COUNT" -le 1 ]; then
-            echo "⚠️ AChecker não instalado corretamente. Ele será ignorado nos testes."
-            echo "ACHECKER_SKIP=1" >> $GITHUB_ENV
-          else
-            echo "✅ Banco de dados do AChecker criado com sucesso."
-            echo "ACHECKER_SKIP=0" >> $GITHUB_ENV
-          fi
 
       - name: Run accessibility tools
         run: |

@@ -1,4 +1,4 @@
-name: Accessibility Single Repo Test (Sem WAVE)
+name: Accessibility Single Repo Test (PHP 7.4)
 
 on:
   workflow_dispatch:
@@ -31,10 +31,15 @@ jobs:
         run: |
           npm install axe-core puppeteer lighthouse node-fetch csv-writer serve detect-port
 
-      - name: Install PHP and Composer
+      - name: Install PHP 7.4 and Composer
         run: |
           sudo apt-get update
-          sudo apt-get install -y php php-mysql mysql-server unzip composer
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository ppa:ondrej/php -y
+          sudo apt-get update
+          sudo apt-get install -y php7.4 php7.4-mysql composer
+          sudo update-alternatives --set php /usr/bin/php7.4
+          php -v
 
       - name: Clone and setup local AChecker
         run: |

@@ -27,15 +27,22 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install dependencies
+      - name: Install Node.js dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y php php-mysql mysql-server unzip
           npm install axe-core puppeteer lighthouse node-fetch csv-writer serve detect-port
 
-      - name: Setup local AChecker
+      - name: Install PHP and Composer
         run: |
-          git clone https://github.com/inclusivedesign/AChecker.git achecker
+          sudo apt-get update
+          sudo apt-get install -y php php-mysql mysql-server unzip composer
+
+      - name: Clone and setup local AChecker
+        run: |
+          git clone https://github.com/inclusive-design/AChecker.git achecker
+          touch achecker/include/config.inc.php
+          cd achecker
+          composer install
+          cd ..
           sudo service mysql start
           mysql -e "CREATE DATABASE achecker; CREATE USER 'achecker'@'localhost' IDENTIFIED BY 'password'; GRANT ALL PRIVILEGES ON achecker.* TO 'achecker'@'localhost'; FLUSH PRIVILEGES;"
           php -S localhost:8000 -t achecker &

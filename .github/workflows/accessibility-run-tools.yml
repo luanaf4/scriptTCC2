@@ -67,7 +67,7 @@ jobs:
 
       - name: Run accessibility tools
         run: |
-          node run-tests-local-achecker.js "${{ github.event.inputs.repo_name }}" "${{ github.event.inputs.url_app }}" "${{ github.event.inputs.tools }}"
+          node run-tests.js "${{ github.event.inputs.repo_name }}" "${{ github.event.inputs.url_app }}" "${{ github.event.inputs.tools }}"
 
       - name: Upload CSV results
         uses: actions/upload-artifact@v4

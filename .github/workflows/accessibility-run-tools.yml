@@ -1,4 +1,4 @@
-name: Accessibility Single Repo Test
+name: Accessibility Single Repo Test (Sem WAVE)
 
 on:
   workflow_dispatch:
@@ -10,9 +10,9 @@ on:
         description: 'URL pública da aplicação (deixe vazio se não houver)'
         required: false
       tools:
-        description: 'Ferramentas para rodar (ex: AXE,Lighthouse,WAVE,AChecker)'
+        description: 'Ferramentas para rodar (ex: AXE,Lighthouse,AChecker)'
         required: true
-        default: 'AXE,Lighthouse,WAVE,AChecker'
+        default: 'AXE,Lighthouse,AChecker'
 
 jobs:
   run-tests:
@@ -33,12 +33,6 @@ jobs:
           sudo apt-get install -y php php-mysql mysql-server unzip
           npm install axe-core puppeteer lighthouse node-fetch csv-writer serve detect-port
 
-      - name: Download WAVE extension
-        run: |
-          mkdir wave-extension
-          curl -L -o wave-extension.zip https://wave.webaim.org/extension-chrome.zip
-          unzip wave-extension.zip -d wave-extension
-
       - name: Setup local AChecker
         run: |
           git clone https://github.com/inclusivedesign/AChecker.git achecker
@@ -55,12 +49,3 @@ jobs:
         with:
           name: accessibility-results
           path: resultados_acessibilidade.csv
-
-      - name: Upload raw WAVE and Lighthouse results
-        uses: actions/upload-artifact@v4
-        with:
-          name: raw-results
-          path: |
-            wave-result-*.html
-            lighthouse-result-*.json
-            lighthouse-result-*.html

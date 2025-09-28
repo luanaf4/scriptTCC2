@@ -1,4 +1,4 @@
-name: Accessibility Single Repo Test (PHP 7.4)
+name: Accessibility Single Repo Test (PHP 7.4 Container)
 
 on:
   workflow_dispatch:
@@ -17,29 +17,37 @@ on:
 jobs:
   run-tests:
     runs-on: ubuntu-latest
+    container:
+      image: php:7.4-cli
+    services:
+      mysql:
+        image: mysql:5.7
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: achecker
+          MYSQL_USER: achecker
+          MYSQL_PASSWORD: password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
 
     steps:
       - name: Checkout workflow repo
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
+      - name: Install system dependencies
+        run: |
+          apt-get update
+          apt-get install -y git unzip curl nodejs npm default-mysql-client
+          curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
       - name: Install Node.js dependencies
         run: |
           npm install axe-core puppeteer lighthouse node-fetch csv-writer serve detect-port
-
-      - name: Install PHP 7.4 and Composer
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y software-properties-common
-          sudo add-apt-repository ppa:ondrej/php -y
-          sudo apt-get update
-          sudo apt-get install -y php7.4 php7.4-mysql composer
-          sudo update-alternatives --set php /usr/bin/php7.4
-          php -v
 
       - name: Clone and setup local AChecker
         run: |
@@ -48,9 +56,7 @@ jobs:
           cd achecker
           composer install
           cd ..
-          sudo service mysql start
-          mysql -e "CREATE DATABASE achecker; CREATE USER 'achecker'@'localhost' IDENTIFIED BY 'password'; GRANT ALL PRIVILEGES ON achecker.* TO 'achecker'@'localhost'; FLUSH PRIVILEGES;"
-          php -S localhost:8000 -t achecker &
+          php -S 0.0.0.0:8000 -t achecker &
 
       - name: Run accessibility tools
         run: |

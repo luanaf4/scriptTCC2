@@ -13,11 +13,6 @@ const tools = process.argv[4].split(',').map(t => t.trim());
 const WCAG_TOTAL_CRITERIA = 50;
 const WCAG_AUTOMATIZAVEL = Math.round(WCAG_TOTAL_CRITERIA * 0.44);
 
-function saveRawResult(filename, content) {
-fs.writeFileSync(filename, content);
-console.log(`Resultado bruto salvo em: ${filename}`);
-}
-
 function classifyByLevel(errors, extractor) {
 let nivelA = 0, nivelAA = 0, nivelAAA = 0, indefinido = 0;
 errors.forEach(err => {
@@ -85,40 +80,10 @@ return { violacoes: results.violations.length, erros: results.violations.map(v =
 async function runLighthouse(url) {
 execSync(`npx lighthouse ${url} --quiet --output=json --output-path=lh.json --output=html --output-path=lh.html`, { stdio: 'inherit' });
 const lhJson = fs.readFileSync('lh.json', 'utf8');
-const lhHtml = fs.readFileSync('lh.html', 'utf8');
-
-saveRawResult(`lighthouse-result-${repoName}.json`, lhJson);
-saveRawResult(`lighthouse-result-${repoName}.html`, lhHtml);
-
 const lh = JSON.parse(lhJson);
 const failed = Object.values(lh.audits).filter(a => a.score === 0);
 const levels = classifyByLevel(failed, a => a.description || '');
 return { violacoes: failed.length, erros: failed.map(a => a.id), ...levels };
-}
-
-async function runWaveExtension(url) {
-const browser = await puppeteer.launch({
-  headless: false,
-  args: [
-    `--disable-extensions-except=${process.cwd()}/wave-extension`,
-    `--load-extension=${process.cwd()}/wave-extension`
-  ]
-});
-const page = await browser.newPage();
-await page.goto(url, { waitUntil: 'networkidle2' });
-
-const htmlContent = await page.content();
-saveRawResult(`wave-result-${repoName}.html`, htmlContent);
-
-await page.waitForSelector('#wave5errors', { timeout: 15000 }).catch(() => {});
-const errorsCount = await page.evaluate(() => {
-  const el = document.querySelector('#wave5errors');
-  return el ? parseInt(el.textContent, 10) : null;
-});
-
-const levels = { nivelA: 0, nivelAA: 0, nivelAAA: 0, indefinido: errorsCount ?? 0 };
-await browser.close();
-return { violacoes: errorsCount ?? 0, erros: [], ...levels };
 }
 
 async function runACheckerLocal(url) {
@@ -172,7 +137,6 @@ for (const tool of tools) {
     let res;
     if (tool === 'AXE') res = await runAxe(urlApp);
     else if (tool === 'Lighthouse') res = await runLighthouse(urlApp);
-    else if (tool === 'WAVE') res = await runWaveExtension(urlApp);
     else if (tool === 'AChecker') res = await runACheckerLocal(urlApp);
     else continue;
 

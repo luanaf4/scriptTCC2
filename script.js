@@ -14,7 +14,7 @@ class GitHubAccessibilityMiner {
     this.tokenLimits = Array(this.tokens.length).fill(null);
     this.graphqlUrl = "https://api.github.com/graphql";
     this.restUrl = "https://api.github.com";
-    this.csvFile = "repositorios_acessibilidade.csv";
+    this.csvFile = "repositorios_acessibilidadeNO.csv";
     this.processedReposFile = "processed_repos.json";
     this.statsCsvFile = "stats.csv";
     this.maxRunMillis = (5 * 60 + 59) * 60 * 1000; // 5h59min em ms
@@ -484,6 +484,18 @@ class GitHubAccessibilityMiner {
       // Sem README, segue sem ele
     }
 
+    if (
+      readmeContent.includes("library") ||
+      readmeContent.includes("biblioteca") ||
+      readmeContent.includes("lib") ||
+      readmeContent.includes("gui") ||
+      readmeContent.includes("graphical user interface") ||
+      name === "turbo"
+    ) {
+      console.log(`   📚 Biblioteca/GUI detectada no README (menção direta)`);
+      return true;
+    }
+
     // --- FILTRO GENÉRICO PARA BIBLIOTECAS/FRAMEWORKS E GUI ---
     if (readmeContent) {
       const firstLines = readmeContent.split('\n').slice(0, 15).join(' ');
@@ -577,19 +589,6 @@ class GitHubAccessibilityMiner {
         console.log(`   📚 Biblioteca/framework/GUI detectada por frases genéricas no início do README`);
         return true;
       }
-    }
-
-    // Se o README mencionar "library", "biblioteca", "lib" ou "gui", pular
-    if (
-      readmeContent.includes("library") ||
-      readmeContent.includes("biblioteca") ||
-      readmeContent.includes("lib") ||
-      readmeContent.includes("gui") ||
-      readmeContent.includes("graphical user interface") ||
-      name === "turbo"
-    ) {
-      console.log(`   📚 Biblioteca/GUI detectada no README`);
-      return true;
     }
 
     // 🔹 Combina tudo para análise

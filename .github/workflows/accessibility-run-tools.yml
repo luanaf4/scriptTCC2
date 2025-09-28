@@ -1,4 +1,4 @@
-name: Accessibility Single Repo Test (PHP 7.4 Container)
+name: Accessibility Single Repo Test (PHP 7.4 + Node 18)
 
 on:
   workflow_dispatch:
@@ -42,8 +42,15 @@ jobs:
       - name: Install system dependencies
         run: |
           apt-get update
-          apt-get install -y git unzip curl nodejs npm default-mysql-client
+          apt-get install -y git unzip curl default-mysql-client
           curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+      - name: Install Node.js 18
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+          apt-get install -y nodejs
+          node -v
+          npm -v
 
       - name: Install Node.js dependencies
         run: |

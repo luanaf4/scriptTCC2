@@ -77,35 +77,71 @@ try {
   const axeSource = fs.readFileSync(require.resolve('axe-core'), 'utf8');
   await page.evaluate(axeSource);
   const results = await page.evaluate(async () => await axe.run());
+
+  // Violações confirmadas (serious ou critical)
+  const confirmedViolations = results.violations.filter(v => v.impact === 'serious' || v.impact === 'critical');
+  // Warnings (moderate ou minor)
+  const warnings = results.violations.filter(v => v.impact === 'moderate' || v.impact === 'minor');
+
+  const levels = classifyByLevel(confirmedViolations, v => v.tags.join(' '));
+
+  // Log de indefinidos
+  confirmedViolations.forEach(v => {
+    if (!v.tags.some(tag => tag.includes('wcag2a') || tag.includes('wcag2aa') || tag.includes('wcag2aaa'))) {
+      console.log(`🔍 Indefinido (AXE): ${v.id} | Impacto: ${v.impact} | Descrição: ${v.description}`);
+    }
+  });
+
   await browser.close();
-  const levels = classifyByLevel(results.violations, v => v.tags.join(' '));
-  return { violacoes: results.violations.length, erros: results.violations.map(v => v.id), ...levels };
+  return {
+    violacoes: confirmedViolations.length,
+    warnings: warnings.length,
+    erros: confirmedViolations.map(v => v.id),
+    ...levels
+  };
 } catch (err) {
   console.error(`❌ Erro no AXE/Puppeteer: ${err.message}`);
-  return { violacoes: 0, erros: [], nivelA: 0, nivelAA: 0, nivelAAA: 0, indefinido: 0 };
+  return { violacoes: 0, warnings: 0, erros: [], nivelA: 0, nivelAA: 0, nivelAAA: 0, indefinido: 0 };
 }
 }
 
 async function runLighthouse(url) {
 console.log(`🚀 Iniciando Lighthouse em ${url}`);
 try {
-  execSync(`npx lighthouse ${url} --quiet --no-sandbox --output=json --output-path=lh.json --timeout=60000`, { stdio: 'inherit', env: { ...process.env, CHROME_PATH: process.env.CHROME_PATH } });
-  execSync(`npx lighthouse ${url} --quiet --no-sandbox --output=html --output-path=lh.html --timeout=60000`, { stdio: 'inherit', env: { ...process.env, CHROME_PATH: process.env.CHROME_PATH } });
+  const puppeteerPath = require('puppeteer').executablePath();
+  execSync(`npx lighthouse ${url} --quiet --no-sandbox --chrome-path=${puppeteerPath} --output=json --output-path=lh.json --timeout=60000`, { stdio: 'inherit' });
+  execSync(`npx lighthouse ${url} --quiet --no-sandbox --chrome-path=${puppeteerPath} --output=html --output-path=lh.html --timeout=60000`, { stdio: 'inherit' });
 
   const lhJson = fs.readFileSync('lh.json', 'utf8');
   const lh = JSON.parse(lhJson);
-  const failed = Object.values(lh.audits).filter(a => a.score === 0);
+
+  // Apenas falhas com score 0 e não informativas
+  const failed = Object.values(lh.audits).filter(a => a.score === 0 && a.scoreDisplayMode !== 'informative');
+  const warnings = Object.values(lh.audits).filter(a => a.scoreDisplayMode === 'informative');
+
   const levels = classifyByLevel(failed, a => a.description || '');
-  return { violacoes: failed.length, erros: failed.map(a => a.id), ...levels };
+
+  failed.forEach(a => {
+    if (!a.description.match(/wcag2a|wcag2aa|wcag2aaa/i)) {
+      console.log(`🔍 Indefinido (Lighthouse): ${a.id} | Descrição: ${a.description}`);
+    }
+  });
+
+  return {
+    violacoes: failed.length,
+    warnings: warnings.length,
+    erros: failed.map(a => a.id),
+    ...levels
+  };
 } catch (err) {
   console.error(`❌ Erro no Lighthouse: ${err.message}`);
-  return { violacoes: 0, erros: [], nivelA: 0, nivelAA: 0, nivelAAA: 0, indefinido: 0 };
+  return { violacoes: 0, warnings: 0, erros: [], nivelA: 0, nivelAA: 0, nivelAAA: 0, indefinido: 0 };
 }
 }
 
 (async () => {
 const results = [];
-const allErrorsSet = new Set();
+const toolErrorsMap = {}; // Erros distintos por ferramenta
 
 // Testar URL antes de rodar
 try {
@@ -142,6 +178,7 @@ if (!urlApp) {
         ferramenta: tool,
         status: 'FAIL',
         violacoes_total: null,
+        warnings_total: null,
         violacoes_A: null,
         violacoes_AA: null,
         violacoes_AAA: null,
@@ -166,17 +203,19 @@ for (const tool of tools) {
       continue;
     }
 
-    res.erros.forEach(e => allErrorsSet.add(e));
+    toolErrorsMap[tool] = new Set(res.erros);
+
     results.push({
       repositorio: repoName,
       ferramenta: tool,
       status: 'OK',
       violacoes_total: res.violacoes,
+      warnings_total: res.warnings || 0,
       violacoes_A: res.nivelA,
       violacoes_AA: res.nivelAA,
       violacoes_AAA: res.nivelAAA,
       violacoes_indefinido: res.indefinido,
-      cer: 0,
+      cer: 0, // será calculado depois
       taxa_sucesso_acessibilidade: ((WCAG_AUTOMATIZAVEL - res.violacoes) / WCAG_AUTOMATIZAVEL).toFixed(2)
     });
   } catch (err) {
@@ -186,6 +225,7 @@ for (const tool of tools) {
       ferramenta: tool,
       status: 'FAIL',
       violacoes_total: null,
+      warnings_total: null,
       violacoes_A: null,
       violacoes_AA: null,
       violacoes_AAA: null,
@@ -196,10 +236,16 @@ for (const tool of tools) {
   }
 }
 
-const totalDistinctErrors = allErrorsSet.size;
+// Calcula CER conforme fórmula do artigo
+const allErrorsGlobal = new Set();
+Object.values(toolErrorsMap).forEach(set => {
+  set.forEach(err => allErrorsGlobal.add(err));
+});
+
 results.forEach(r => {
-  if (r.status === 'OK' && totalDistinctErrors > 0) {
-    r.cer = (r.violacoes_total / totalDistinctErrors).toFixed(2);
+  if (r.status === 'OK' && allErrorsGlobal.size > 0) {
+    const toolSet = toolErrorsMap[r.ferramenta] || new Set();
+    r.cer = (toolSet.size / allErrorsGlobal.size).toFixed(2);
   }
 });
 
@@ -214,6 +260,7 @@ const csvWriter = createCsvWriter({
     { id: 'ferramenta', title: 'Ferramenta' },
     { id: 'status', title: 'Status' },
     { id: 'violacoes_total', title: 'ViolacoesTotal' },
+    { id: 'warnings_total', title: 'WarningsTotal' },
     { id: 'violacoes_A', title: 'ViolacoesA' },
     { id: 'violacoes_AA', title: 'ViolacoesAA' },
     { id: 'violacoes_AAA', title: 'ViolacoesAAA' },

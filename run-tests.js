@@ -1,8 +1,8 @@
+const fetch = require('node-fetch'); // usando node-fetch@2
 const fs = require('fs');
 const path = require('path');
 const puppeteer = require('puppeteer');
 const { execSync } = require('child_process');
-const fetch = require('node-fetch');
 const detectPort = require('detect-port');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 
@@ -13,6 +13,7 @@ const tools = process.argv[4].split(',').map(t => t.trim());
 const WCAG_TOTAL_CRITERIA = 50;
 const WCAG_AUTOMATIZAVEL = Math.round(WCAG_TOTAL_CRITERIA * 0.44);
 
+// Função para classificar violações por nível WCAG
 function classifyByLevel(errors, extractor) {
 let nivelA = 0, nivelAA = 0, nivelAAA = 0, indefinido = 0;
 errors.forEach(err => {
@@ -32,6 +33,29 @@ errors.forEach(err => {
 return { nivelA, nivelAA, nivelAAA, indefinido };
 }
 
+// Função para esperar o AChecker estar pronto
+async function waitForAChecker(url, timeoutMs = 30000, intervalMs = 2000) {
+console.log(`⏳ Aguardando AChecker iniciar em ${url} ...`);
+const start = Date.now();
+
+while (Date.now() - start < timeoutMs) {
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      console.log(`✅ AChecker está pronto!`);
+      return true;
+    }
+  } catch (err) {
+    // Servidor ainda não respondeu, aguardar
+  }
+  await new Promise(resolve => setTimeout(resolve, intervalMs));
+}
+
+console.error(`❌ Timeout: AChecker não respondeu em ${timeoutMs / 1000} segundos`);
+return false;
+}
+
+// Detectar porta local
 async function detectLocalUrl() {
 const portasComuns = [3000, 5000, 8080];
 for (const porta of portasComuns) {
@@ -65,6 +89,7 @@ if (fs.existsSync(pkgPath)) {
 return null;
 }
 
+// Ferramenta AXE
 async function runAxe(url) {
 const browser = await puppeteer.launch({ headless: 'new' });
 const page = await browser.newPage();
@@ -77,6 +102,7 @@ const levels = classifyByLevel(results.violations, v => v.tags.join(' '));
 return { violacoes: results.violations.length, erros: results.violations.map(v => v.id), ...levels };
 }
 
+// Ferramenta Lighthouse
 async function runLighthouse(url) {
 execSync(`npx lighthouse ${url} --quiet --output=json --output-path=lh.json --output=html --output-path=lh.html`, { stdio: 'inherit' });
 const lhJson = fs.readFileSync('lh.json', 'utf8');
@@ -86,6 +112,7 @@ const levels = classifyByLevel(failed, a => a.description || '');
 return { violacoes: failed.length, erros: failed.map(a => a.id), ...levels };
 }
 
+// Ferramenta AChecker local
 async function runACheckerLocal(url) {
 const res = await fetch(`http://localhost:8000/checkacc.php?uri=${encodeURIComponent(url)}&output=json`);
 const data = await res.json();
@@ -93,6 +120,7 @@ const levels = classifyByLevel(data.resultset || [], e => e.guideline || '');
 return { violacoes: data.summary.NumOfErrors, erros: data.resultset?.map(e => e.error_id) || [], ...levels };
 }
 
+// Execução principal
 (async () => {
 const results = [];
 const allErrorsSet = new Set();
@@ -137,8 +165,14 @@ for (const tool of tools) {
     let res;
     if (tool === 'AXE') res = await runAxe(urlApp);
     else if (tool === 'Lighthouse') res = await runLighthouse(urlApp);
-    else if (tool === 'AChecker') res = await runACheckerLocal(urlApp);
-    else continue;
+    else if (tool === 'AChecker') {
+      const ready = await waitForAChecker('http://localhost:8000/checkacc.php?uri=https://example.com&output=json');
+      if (!ready) {
+        console.error("❌ AChecker não respondeu, pulando...");
+        continue;
+      }
+      res = await runACheckerLocal(urlApp);
+    } else continue;
 
     res.erros.forEach(e => allErrorsSet.add(e));
     results.push({

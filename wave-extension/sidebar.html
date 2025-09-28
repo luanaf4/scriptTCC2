@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" type="text/css" href="styles/report.css" />
+    <script src="sidebar.min.js" type="text/javascript" ></script>
+</head>
+<body>
+<div id="sidebar_container" role="region" aria-label="WAVE Sidebar">
+	<div id="sidebar_controls">
+		<header role="header">
+			<a href="https://wave.webaim.org/" target="_blank" id="wave5logo"><img src="img/wavelogo.svg" alt="WAVE Web Accessibility Evaluation Tool"></a>
+			<div id="wave5powered">powered by<br><a href="https://webaim.org/" target="_blank">WebAIM</a></div>
+		</header>
+		
+		<div id="sidebar_error">
+			<h2>Error</h2>
+			<div id="wave5_error">Please provide a valid URL</div>
+		</div>
+		
+		<div id="styleswitcher"><input type="checkbox" id="styles_switch" name="set-name" class="switch-input wavehidden" checked><label for="styles_switch" class="switch-label">Styles:</label><span class="toggle-off" aria-hidden="true">OFF</span><span class="toggle-on" aria-hidden="true">ON</span> </label></div>
+	</div>
+	
+	<div id="sidebar_wrapper">
+		<h2>Summary</h2>
+		<div id="tabs">
+			<ul id="tabslist">
+				<li id="summarytab"><button value="summary">Summary</button></li><li id="detailstab"><button value="details">Details</button></li><li id="referencetab"><button value="reference">Reference</button></li><li id="navigationtab"><button value="navigation">Order</button></li><li id="structuretab"><button value="outline">Structure</button></li><li id="contrasttab"><button value="contrast">Contrast</button></li>
+			</ul>
+			<div id="summary">
+				<div id="numbers">
+					<ul>
+						<li id="error"><img src="img/error.svg" alt=""> <span>?</span><br>Errors</li>
+						<li id="contrastnum"><img src="img/contrast.svg" alt=""> <span>?</span><br>Contrast Errors</li>
+						<li id="alert"><img src="img/alert.svg" alt=""> <span>?</span><br>Alerts</li>
+						<li id="feature"><img src="img/feature.svg" alt=""> <span>?</span><br>Features</li>
+						<li id="structure"><img src="img/structure.svg" alt=""> <span>?</span><br>Structural Elements</li>
+						<li id="aria"><img src="img/aria.svg" alt=""> <span>?</span><br>ARIA</li>
+					</ul>
+				</div>
+				<button id="viewdetails"><img src="/img/detailsbutton.svg" alt="View Details"></button>
+				<p id="congrats">Congratulations! No errors were detected! Manual testing is still necessary to ensure compliance and optimal accessibility.</p>
+			</div>
+			<div id="details">
+				<div id="iconlist"></div>
+			</div>
+			
+			<div id="reference">
+				<div id="tab_docs_placeholder">Click a <img src="/img/icon_reference.svg" alt="More Information"> icon in the Details panel or "REFERENCE" in an icon tooltip to view documentation.<br><br><a href="#" class="tabs_docs_showindex_link">View the icon index</a></div>
+				<div id="tab_docs_container">
+					<div id="tab_docs_icon"></div>
+					<div id="tab_docs_type"></div>
+					<div id="tab_docs_title"></div>
+					<h3>What It Means</h3>
+					<div id="tab_docs_summary"></div>
+					<h3>Why It Matters</h3>
+					<div id="tab_docs_purpose"></div>
+					<h3>How to Fix It</h3>
+					<div id="tab_docs_actions"></div>
+					<h3>The Algorithm... in English</h3>
+					<div id="tab_docs_details"></div>
+					<h3>Standards and Guidelines</h3>
+					<ul id="tab_docs_guidelines">None</ul>
+					<div id="tabs_docs_showindex"><a href="#" class="tabs_docs_showindex_link">Icon index</a></div>
+				</div>
+				<div id="tab_docs_index"></div>
+			</div>
+			<div id="navigation">
+				<div id="navorder">
+					<p><a href="#" id="refreshnavorder">Refresh Navigation Order</a></p>
+					<p><a href="#" id="showwaveicons">Show WAVE Icons</a></p>
+					<p style="text-align:left;font-style:italic;margin:10px 0;">Order, role, and accessible name (what is read by a screen reader) for all navigable page elements are listed. Elements that do not have a function should not be listed.</p>
+					<ol id="navlist"></ol>
+				</div>
+			</div>
+			<div id="outline">
+				<div id="outlineempty">This page has no heading structure!</div>
+				<div id="pageoutline">
+					
+				</div>
+			</div>
+			<div id="contrast">
+				<div id="contrasttools">
+					<p id="contrastmessage">Click a Contrast icon below or within the web page to view details.</p>
+					<fieldset>
+						<legend>Foreground</legend>
+						<p class="error" id="fError">Please enter a valid RGB hex value (alpha value optional), or use the color picker.</p>
+						<label>
+							Hex Value
+							<div>#<input id="foreground" type="text" maxlength="9" required></div>
+						</label>
+						<label>
+							Color Picker
+							<input id="fPick" type="color">
+						</label>
+						<label>
+							Alpha
+							<input id="alpha" type="number" value="1.00" step="0.01" min="0" max="1">
+						</label>
+						<label class="lightness">
+							Lightness
+							<div class="gradient"><input id="fLightness" type="range" min="0" max="100" step="1"></div>
+						</label>
+					</fieldset>
+					<fieldset>
+						<legend>Background</legend>
+						<p class="error" id="bError" tabindex="-1">Please enter a valid RGB hex value or use the color picker.</p>
+						<label>
+							Hex Value
+							<div>#<input id="background" type="text" maxlength="7" required></div>
+						</label>
+						<label>
+							Color Picker
+							<input id="bPick" type="color">
+						</label>
+						<label class="lightness">
+							Lightness
+							<div class="gradient"><input id="bLightness" type="range" min="0" max="100" step="1"></div>
+						</label>
+					</fieldset>
+					<p><b>Contrast Ratio:</b> <span id="ratio"></span></p>
+					<p><b>Text Size:</b> <span id="textsize">Normal</span></p>
+					<p><span id="sample">Sample</span></p>
+					<p>WCAG AA: <span id="AA" class="pass">Pass</span><br>
+					WCAG AAA: <span id="AAA" class="pass">Pass</span><br>
+					</p>
+					<div id="contrastlist"></div>
+					<p><a href="#" id="desaturate">Desaturate page</a></p>
+					<p><i>WAVE does not detect contrast errors when gradients, filters, or background transparency are present. WCAG requires a conformant fallback background color when background images are present. Use the Color Picker eye dropper to measure image contrasts.</i><br><br></p>
+					
+				</div>
+			</div>
+		</div>
+	</div><!-- Side Wrapper -->
+</div>
+</body>
+</html>

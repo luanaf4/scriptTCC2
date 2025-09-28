@@ -42,7 +42,12 @@ jobs:
       - name: Install system dependencies
         run: |
           apt-get update
-          apt-get install -y git unzip curl default-mysql-client
+          apt-get install -y git unzip curl default-mysql-client \
+            libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+            libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
+            libxrandr2 libgbm1 libasound2 libpangocairo-1.0-0 libpango-1.0-0 \
+            libgtk-3-0 libx11-xcb1 libxrender1 libxcursor1 libxi6 libxtst6 \
+            libxss1 libxshmfence1
           curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
       - name: Install Node.js 18
@@ -59,14 +64,33 @@ jobs:
       - name: Clone and setup local AChecker
         run: |
           git clone https://github.com/inclusive-design/AChecker.git achecker
-          touch achecker/include/config.inc.php
+          cat > achecker/include/config.inc.php <<'EOF'
+          <?php
+          define('DB_HOST', 'mysql');
+          define('DB_PORT', '3306');
+          define('DB_NAME', 'achecker');
+          define('DB_USER', 'achecker');
+          define('DB_PASSWORD', 'password');
+          define('TABLE_PREFIX', '');
+          define('MYSQLI_ENABLED', true);
+          define('ACHECKER_VERSION', '1.4');
+          ?>
+          EOF
           cd achecker
           composer install
           cd ..
+          # Espera MySQL estar pronto
+          until mysqladmin ping -h mysql --silent; do
+            echo "⏳ Aguardando MySQL..."
+            sleep 2
+          done
+          mysql -h mysql -u root -proot achecker < achecker/install/achecker.sql
           php -S 0.0.0.0:8000 -t achecker &
 
       - name: Run accessibility tools
         run: |
+          # Ajuste no Lighthouse para evitar erro de múltiplos --output-path
+          sed -i 's/npx lighthouse \(.*\) --quiet --output=json --output-path=lh.json --output=html --output-path=lh.html --timeout=60000/npx lighthouse \1 --quiet --output=json --output-path=lh.json --timeout=60000 \n npx lighthouse \1 --quiet --output=html --output-path=lh.html --timeout=60000/' run-tests.js
           node run-tests.js "${{ github.event.inputs.repo_name }}" "${{ github.event.inputs.url_app }}" "${{ github.event.inputs.tools }}"
 
       - name: Upload CSV results

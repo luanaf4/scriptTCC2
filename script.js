@@ -437,17 +437,34 @@ class GitHubAccessibilityMiner {
   }
 
   async getReadmeContent(owner, repo) {
-    const possibleNames = [
-      "README.md",
-      "README.MD",
-      "README",
-      "readme.md",
-      "readme",
-      "Readme.md",
-    ];
-    for (const name of possibleNames) {
-      const content = await this.getFileContent(owner, repo, name);
-      if (content) return content;
+    // 1. Tenta via endpoint oficial do GitHub para README principal
+    try {
+      const apiUrl = `${this.restUrl}/repos/${owner}/${repo}/readme`;
+      const content = await this.makeRestRequest(apiUrl);
+      if (content && content.content) {
+        return Buffer.from(content.content, "base64").toString("utf8");
+      }
+    } catch (e) {
+      // Se não encontrar, tenta varredura README.*
+    }
+    try {
+      const rootContents = await this.getRepositoryContents(owner, repo);
+      for (const file of rootContents) {
+        if (
+          file &&
+          typeof file.name === "string" &&
+          /^README\.[^/]+$/i.test(file.name)
+        ) {
+          try {
+            const content = await this.getFileContent(owner, repo, file.name);
+            if (content) return content;
+          } catch (e) {
+            // ignora e tenta o próximo
+          }
+        }
+      }
+    } catch (e) {
+      // ignora erro ao listar arquivos do root
     }
     return null;
   }
@@ -821,8 +838,6 @@ class GitHubAccessibilityMiner {
       "website",
       "web platform",
       "web portal",
-      "web interface",
-      "web service",
       "online application",
       "web based",
       "browser based",

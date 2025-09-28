@@ -108,10 +108,20 @@ try {
 async function runLighthouse(url) {
 console.log(`🚀 Iniciando Lighthouse em ${url}`);
 try {
-  const puppeteerPath = require('puppeteer').executablePath();
-  execSync(`npx lighthouse ${url} --quiet --no-sandbox --chrome-path=${puppeteerPath} --output=json --output-path=lh.json --timeout=60000`, { stdio: 'inherit' });
-  execSync(`npx lighthouse ${url} --quiet --no-sandbox --chrome-path=${puppeteerPath} --output=html --output-path=lh.html --timeout=60000`, { stdio: 'inherit' });
+  // Abre Chromium via Puppeteer com porta de depuração remota
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--remote-debugging-port=9222']
+  });
 
+  // Executa Lighthouse conectando ao navegador já aberto
+  execSync(`npx lighthouse ${url} --quiet --no-sandbox --port=9222 --output=json --output-path=lh.json --timeout=60000`, { stdio: 'inherit' });
+  execSync(`npx lighthouse ${url} --quiet --no-sandbox --port=9222 --output=html --output-path=lh.html --timeout=60000`, { stdio: 'inherit' });
+
+  // Fecha o navegador
+  await browser.close();
+
+  // Lê e processa resultados
   const lhJson = fs.readFileSync('lh.json', 'utf8');
   const lh = JSON.parse(lhJson);
 

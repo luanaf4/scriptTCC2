@@ -791,8 +791,7 @@ class GitHubAccessibilityMiner {
     const isLibrary =
       hasLibraryNamePattern ||
       (hasStrongLibraryKeywords && !hasAppKeywords) ||
-      isAwesomeList ||
-      isConfigRepo;
+      isAwesomeList;
 
     // Log para debug
     if (isLibrary) {
@@ -1651,4 +1650,14 @@ const miner = new GitHubAccessibilityMiner();
 miner.run().catch((error) => {
 console.error("💥 Erro fatal:", error);
 process.exit(1);
+});
+
+// No final do arquivo, garantir que erros não tratados não causem travamento silencioso
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('💥 Unhandled Rejection:', reason);
+  process.exit(1);
+});
+process.on('uncaughtException', (err) => {
+  console.error('💥 Uncaught Exception:', err);
+  process.exit(1);
 });

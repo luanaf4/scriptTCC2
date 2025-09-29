@@ -376,3 +376,4 @@ console.log(`   ⏭️  Pulados (sem homepage): ${totalPulados}`);
 
 // Força encerramento do processo para o GitHub Actions seguir para o próximo step
 process.exit(0);
+})();

@@ -2,6 +2,8 @@ const fs = require('fs');
 const { execSync, spawn } = require('child_process');
 const puppeteer = require('puppeteer');
 const fetch = require('node-fetch');
+const detectPort = require('detect-port');
+const path = require('path');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 
 /**
@@ -157,7 +159,7 @@ async function getHomepage(repoFullName) {
 }
 
 // ----------------------
-// Detectar linguagem e rodar localmente
+// Detectar linguagem
 // ----------------------
 function detectLanguage(repoPath) {
 if (fs.existsSync(`${repoPath}/package.json`)) return 'node';
@@ -168,6 +170,9 @@ if (fs.existsSync(`${repoPath}/build.gradle`)) return 'java-gradle';
 return 'unknown';
 }
 
+// ----------------------
+// Iniciar servidor local
+// ----------------------
 function startServer(repoPath, lang) {
 try {
   switch (lang) {
@@ -194,6 +199,32 @@ try {
   console.error(`❌ Erro ao iniciar servidor: ${err.message}`);
   return null;
 }
+}
+
+// ----------------------
+// Detectar porta local
+// ----------------------
+async function detectLocalUrl(repoPath) {
+ const portasComuns = [3000, 5000, 8080, 4200, 5173];
+ for (const porta of portasComuns) {
+   const livre = await detectPort(porta);
+   if (livre !== porta) {
+     return `http://localhost:${porta}`;
+   }
+ }
+ // Busca em arquivos
+ const filesToCheck = ['.env', 'package.json', 'vite.config.js', 'angular.json', 'webpack.config.js'];
+ for (const file of filesToCheck) {
+   const filePath = path.join(repoPath, file);
+   if (fs.existsSync(filePath)) {
+     const content = fs.readFileSync(filePath, 'utf8');
+     const match = content.match(/PORT\s*=?\s*(\d{2,5})/i) || content.match(/--port\s+(\d{2,5})/i);
+     if (match) {
+       return `http://localhost:${match[1]}`;
+     }
+   }
+ }
+ return null;
 }
 
 // ----------------------
@@ -229,21 +260,36 @@ console.log('📄 Resultados salvos em resultados_acessibilidade.csv');
 const reposData = JSON.parse(fs.readFileSync('repositorios.json', 'utf8'));
 const results = [];
 const toolErrorsMap = {};
+let totalRodados = 0;
+let totalPulados = 0;
 
 for (const repo of reposData) {
   const repoName = repo["Repositório"];
   let metodo = '';
   let res = null;
 
-  // Primeira tentativa: homepage
   const homepage = await getHomepage(repoName);
-  if (homepage) {
-    metodo = 'homepage';
-    res = await runAxe(homepage);
-  }
+  if (!homepage) {
+    console.log(`⏭️  Pulando ${repoName} - sem homepage`);
+    totalPulados++;
+    results.push({
+      repositorio: repoName,
+      metodo: 'none',
+      status: 'SKIPPED',
+      violacoes_total: null,
+      warnings_total: null,
+      violacoes_A: null,
+      violacoes_AA: null,
+      violacoes_AAA: null,
+      violacoes_indefinido: null,
+      criterios_total: WCAG_TOTAL_CRITERIA,
+      criterios_automatizaveis: WCAG_AUTOMATIZAVEL,
+      cer: null,
+      taxa_sucesso_acessibilidade: null
+    });
 
-  // Segunda tentativa: clonar e rodar
-  if (!res) {
+    // --- Clonagem desativada temporariamente para repos sem homepage ---
+    /*
     metodo = 'clonado';
     const repoPath = `./temp/${repoName.replace('/', '_')}`;
     try {
@@ -252,16 +298,26 @@ for (const repo of reposData) {
       const server = startServer(repoPath, lang);
       if (server) {
         await new Promise(r => setTimeout(r, 15000));
-        res = await runAxe('http://localhost:8080');
+        const urlApp = await detectLocalUrl(repoPath);
+        if (urlApp) {
+          res = await runAxe(urlApp);
+        } else {
+          console.error('❌ Nenhuma aplicação local detectada');
+        }
         server.kill();
       }
     } catch (err) {
       console.error(`❌ Erro ao clonar/rodar ${repoName}: ${err.message}`);
     }
+    */
+    continue;
   }
 
+  metodo = 'homepage';
+  res = await runAxe(homepage);
+
   if (!res) {
-    metodo = metodo || 'falhou';
+    metodo = 'falhou';
     results.push({
       repositorio: repoName,
       metodo,
@@ -281,6 +337,7 @@ for (const repo of reposData) {
   }
 
   toolErrorsMap['AXE'] = new Set(res.erros);
+  totalRodados++;
 
   results.push({
     repositorio: repoName,
@@ -299,7 +356,6 @@ for (const repo of reposData) {
   });
 }
 
-// Cálculo CER
 const allErrorsGlobal = new Set();
 Object.values(toolErrorsMap).forEach(set => {
   set.forEach(err => allErrorsGlobal.add(err));
@@ -313,4 +369,8 @@ results.forEach(r => {
 });
 
 await saveCsv(results);
+
+console.log(`\n📊 Resumo da execução:`);
+console.log(`   ✅ Rodados: ${totalRodados}`);
+console.log(`   ⏭️  Pulados (sem homepage): ${totalPulados}`);
 })();

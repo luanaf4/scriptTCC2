@@ -2,7 +2,7 @@ const fs = require('fs');
 const { execSync, spawn } = require('child_process');
 const puppeteer = require('puppeteer');
 const fetch = require('node-fetch');
-const detectPort = require('detect-port');
+// const detectPort = require('detect-port');
 const path = require('path');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 

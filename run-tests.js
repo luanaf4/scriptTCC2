@@ -373,4 +373,6 @@ await saveCsv(results);
 console.log(`\n📊 Resumo da execução:`);
 console.log(`   ✅ Rodados: ${totalRodados}`);
 console.log(`   ⏭️  Pulados (sem homepage): ${totalPulados}`);
-})();
+
+// Força encerramento do processo para o GitHub Actions seguir para o próximo step
+process.exit(0);

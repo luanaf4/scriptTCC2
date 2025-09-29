@@ -1,24 +1,11 @@
-name: Accessibility Single Repo Test
+name: Accessibility All Repos Test (Only AXE)
 
 on:
   workflow_dispatch:
-    inputs:
-      repo_name:
-        description: 'Nome do repositório no formato usuario/repositorio'
-        required: true
-      url_app:
-        description: 'URL pública da aplicação (deixe vazio se não houver)'
-        required: false
-      tools:
-        description: 'Ferramentas para rodar (ex: AXE,Lighthouse)'
-        required: true
-        default: 'AXE,Lighthouse'
 
 jobs:
   run-tests:
     runs-on: ubuntu-latest
-    container:
-      image: php:7.4-cli
 
     steps:
       - name: Checkout workflow repo
@@ -26,8 +13,9 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          apt-get update
-          apt-get install -y git unzip curl default-mysql-client chromium \
+          sudo apt-get update
+          sudo apt-get install -y git unzip curl default-mysql-client chromium \
+            python3 python3-pip php composer openjdk-17-jdk maven \
             libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
             libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
             libxrandr2 libgbm1 libasound2 libpangocairo-1.0-0 libpango-1.0-0 \
@@ -35,22 +23,25 @@ jobs:
             libxss1 libxshmfence1
           export CHROME_PATH=$(which chromium)
           echo "CHROME_PATH=$(which chromium)" >> $GITHUB_ENV
-          curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
       - name: Install Node.js 18
         run: |
-          curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-          apt-get install -y nodejs
+          curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+          sudo apt-get install -y nodejs
           node -v
           npm -v
 
-      - name: Install Node.js dependencies (with node-fetch@2)
+      - name: Install Node.js dependencies
         run: |
-          npm install axe-core puppeteer lighthouse node-fetch@2 csv-writer serve detect-port
+          npm install axe-core puppeteer node-fetch@2 csv-writer csv-parser detect-port
 
-      - name: Run accessibility tools
+      - name: Run accessibility tests for all repos
         run: |
-          node run-tests.js "${{ github.event.inputs.repo_name }}" "${{ github.event.inputs.url_app }}" "${{ github.event.inputs.tools }}"
+          node run-tests-all.js
+        env:
+          TOKEN_1: ${{ secrets.TOKEN_1 }}
+          TOKEN_2: ${{ secrets.TOKEN_2 }}
+          TOKEN_3: ${{ secrets.TOKEN_3 }}
 
       - name: Upload CSV results
         uses: actions/upload-artifact@v4

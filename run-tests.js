@@ -1,284 +1,308 @@
-const fetch = require('node-fetch'); // usando node-fetch@2
 const fs = require('fs');
-const path = require('path');
+const csv = require('csv-parser');
+const fetch = require('node-fetch');
+const { execSync, spawn } = require('child_process');
 const puppeteer = require('puppeteer');
-const { execSync } = require('child_process');
+const path = require('path');
 const detectPort = require('detect-port');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 
-const repoName = process.argv[2];
-let urlApp = process.argv[3];
-const tools = process.argv[4].split(',').map(t => t.trim());
+/**
+* WCAG 2.2 - Total de critérios de sucesso
+* Fonte: W3C Web Content Accessibility Guidelines (WCAG) 2.2
+* https://www.w3.org/WAI/standards-guidelines/wcag/
+*
+* Total de critérios WCAG 2.2 = 58
+* 
+* Cobertura automatizável (~44%) segundo Abu Doush et al. (2023):
+* "apenas cerca de 44% dos critérios de acessibilidade estabelecidos pela WCAG 2.1
+* podem ser totalmente automatizados com tecnologias padrão"
+* 
+* Esse fator é mantido para WCAG 2.2 por similaridade, mas idealmente deveria ser recalculado
+* com base em um mapeamento atualizado dos critérios 2.2.
+*/
+const WCAG_TOTAL_CRITERIA = 58;
+const WCAG_AUTOMATIZAVEL = Math.round(WCAG_TOTAL_CRITERIA * 0.44); // ≈ 26 critérios
 
-const WCAG_TOTAL_CRITERIA = 50;
-const WCAG_AUTOMATIZAVEL = Math.round(WCAG_TOTAL_CRITERIA * 0.44);
+// === Configuração de múltiplos tokens ===
+const tokens = [
+ process.env.TOKEN_1,
+ process.env.TOKEN_2,
+ process.env.TOKEN_3
+].filter(Boolean);
+
+let tokenIndex = 0;
+let tokenLimits = Array(tokens.length).fill(null);
+
+function nextToken() {
+ tokenIndex = (tokenIndex + 1) % tokens.length;
+}
+
+function switchTokenIfNeeded(rateLimit) {
+ if (rateLimit !== null && rateLimit <= 0) {
+   let startIndex = tokenIndex;
+   let found = false;
+   for (let i = 1; i <= tokens.length; i++) {
+     let nextIndex = (startIndex + i) % tokens.length;
+     if (!tokenLimits[nextIndex] || tokenLimits[nextIndex] > 0) {
+       tokenIndex = nextIndex;
+       found = true;
+       break;
+     }
+   }
+   if (!found) {
+     console.log('⏳ Todos os tokens atingiram o rate limit. Aguardando reset...');
+   }
+ }
+}
+
+async function makeRestRequest(url) {
+ const options = {
+   headers: {
+     'User-Agent': 'GitHub-Accessibility-AXE',
+     Accept: 'application/vnd.github.v3+json',
+     Authorization: `token ${tokens[tokenIndex]}`
+   },
+   timeout: 20000
+ };
+
+ const response = await fetch(url, options);
+ const rateLimit = parseInt(response.headers.get('x-ratelimit-remaining'));
+ const resetTime = parseInt(response.headers.get('x-ratelimit-reset'));
+ tokenLimits[tokenIndex] = rateLimit;
+
+ if (rateLimit < 50 && tokens.length > 1) {
+   nextToken();
+   tokenLimits[tokenIndex] = null;
+   console.log(`🔄 Trocando para o próximo token (REST), rate limit baixo: ${rateLimit}`);
+ }
+
+ switchTokenIfNeeded(rateLimit);
+
+ if (rateLimit < 50 && tokens.length <= 1) {
+   const waitTime = Math.max(resetTime * 1000 - Date.now() + 5000, 0);
+   console.log(`⏳ Rate limit REST baixo (${rateLimit}), aguardando ${Math.ceil(waitTime / 1000)}s...`);
+   await new Promise(resolve => setTimeout(resolve, waitTime));
+ }
+
+ return await response.json();
+}
+
+async function getHomepageFromGitHub(repoName) {
+ try {
+   const data = await makeRestRequest(`https://api.github.com/repos/${repoName}`);
+   if (data && data.homepage && data.homepage.trim() !== '') {
+     return data.homepage.trim();
+   }
+   return null;
+ } catch (err) {
+   console.error(`❌ Erro ao consultar API GitHub para ${repoName}: ${err.message}`);
+   return null;
+ }
+}
 
 function classifyByLevel(errors, extractor) {
-let nivelA = 0, nivelAA = 0, nivelAAA = 0, indefinido = 0;
-errors.forEach(err => {
-  const level = extractor(err);
-  if (!level) {
-    indefinido++;
-  } else if (level.includes('wcag2a') || level.includes('Level A')) {
-    nivelA++;
-  } else if (level.includes('wcag2aa') || level.includes('Level AA')) {
-    nivelAA++;
-  } else if (level.includes('wcag2aaa') || level.includes('Level AAA')) {
-    nivelAAA++;
-  } else {
-    indefinido++;
-  }
-});
-return { nivelA, nivelAA, nivelAAA, indefinido };
-}
-
-async function detectLocalUrl() {
-const portasComuns = [3000, 5000, 8080];
-for (const porta of portasComuns) {
-  const livre = await detectPort(porta);
-  if (livre !== porta) {
-    return `http://localhost:${porta}`;
-  }
-}
-return null;
-}
-
-function detectPortFromEnv(repoPath) {
-const envPath = path.join(repoPath, '.env');
-if (fs.existsSync(envPath)) {
-  const envContent = fs.readFileSync(envPath, 'utf8');
-  const match = envContent.match(/PORT\s*=\s*(\d+)/i);
-  if (match) return parseInt(match[1], 10);
-}
-return null;
-}
-
-function detectPortFromPackageJson(repoPath) {
-const pkgPath = path.join(repoPath, 'package.json');
-if (fs.existsSync(pkgPath)) {
-  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-  if (pkg.scripts && pkg.scripts.start) {
-    const match = pkg.scripts.start.match(/PORT\s*=\s*(\d+)/i) || pkg.scripts.start.match(/--port\s+(\d+)/i);
-    if (match) return parseInt(match[1], 10);
-  }
-}
-return null;
+ let nivelA = 0, nivelAA = 0, nivelAAA = 0, indefinido = 0;
+ errors.forEach(err => {
+   const level = extractor(err);
+   if (!level) {
+     indefinido++;
+   } else if (level.includes('wcag2a') || level.includes('Level A')) {
+     nivelA++;
+   } else if (level.includes('wcag2aa') || level.includes('Level AA')) {
+     nivelAA++;
+   } else if (level.includes('wcag2aaa') || level.includes('Level AAA')) {
+     nivelAAA++;
+   } else {
+     indefinido++;
+   }
+ });
+ return { nivelA, nivelAA, nivelAAA, indefinido };
 }
 
 async function runAxe(url) {
-console.log(`🚀 Iniciando AXE em ${url}`);
-try {
-  const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
-  const page = await browser.newPage();
-  await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
-  const axeSource = fs.readFileSync(require.resolve('axe-core'), 'utf8');
-  await page.evaluate(axeSource);
-  const results = await page.evaluate(async () => await axe.run());
+ console.log(`🚀 Iniciando AXE em ${url}`);
+ const browser = await puppeteer.launch({
+   headless: 'new',
+   args: ['--no-sandbox', '--disable-setuid-sandbox']
+ });
+ const page = await browser.newPage();
+ await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+ const axeSource = fs.readFileSync(require.resolve('axe-core'), 'utf8');
+ await page.evaluate(axeSource);
+ const results = await page.evaluate(async () => await axe.run());
 
-  // Violações confirmadas (serious ou critical)
-  const confirmedViolations = results.violations.filter(v => v.impact === 'serious' || v.impact === 'critical');
-  // Warnings (moderate ou minor)
-  const warnings = results.violations.filter(v => v.impact === 'moderate' || v.impact === 'minor');
+ const confirmedViolations = results.violations.filter(v => v.impact === 'serious' || v.impact === 'critical');
+ const warnings = results.violations.filter(v => v.impact === 'moderate' || v.impact === 'minor');
 
-  const levels = classifyByLevel(confirmedViolations, v => v.tags.join(' '));
+ const levels = classifyByLevel(confirmedViolations, v => v.tags.join(' '));
 
-  // Log de indefinidos
-  confirmedViolations.forEach(v => {
-    if (!v.tags.some(tag => tag.includes('wcag2a') || tag.includes('wcag2aa') || tag.includes('wcag2aaa'))) {
-      console.log(`🔍 Indefinido (AXE): ${v.id} | Impacto: ${v.impact} | Descrição: ${v.description}`);
-    }
-  });
-
-  await browser.close();
-  return {
-    violacoes: confirmedViolations.length,
-    warnings: warnings.length,
-    erros: confirmedViolations.map(v => v.id),
-    ...levels
-  };
-} catch (err) {
-  console.error(`❌ Erro no AXE/Puppeteer: ${err.message}`);
-  return { violacoes: 0, warnings: 0, erros: [], nivelA: 0, nivelAA: 0, nivelAAA: 0, indefinido: 0 };
-}
+ await browser.close();
+ return {
+   violacoes: confirmedViolations.length,
+   warnings: warnings.length,
+   erros: confirmedViolations.map(v => v.id),
+   ...levels
+ };
 }
 
-async function runLighthouse(url) {
-console.log(`🚀 Iniciando Lighthouse em ${url}`);
-try {
-  // Abre Chromium via Puppeteer com porta de depuração remota
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--remote-debugging-port=9222']
-  });
-
-  // Executa Lighthouse conectando ao navegador já aberto
-  execSync(`npx lighthouse ${url} --quiet --no-sandbox --port=9222 --output=json --output-path=lh.json --timeout=60000`, { stdio: 'inherit' });
-  execSync(`npx lighthouse ${url} --quiet --no-sandbox --port=9222 --output=html --output-path=lh.html --timeout=60000`, { stdio: 'inherit' });
-
-  // Fecha o navegador
-  await browser.close();
-
-  // Lê e processa resultados
-  const lhJson = fs.readFileSync('lh.json', 'utf8');
-  const lh = JSON.parse(lhJson);
-
-  // Apenas falhas com score 0 e não informativas
-  const failed = Object.values(lh.audits).filter(a => a.score === 0 && a.scoreDisplayMode !== 'informative');
-  const warnings = Object.values(lh.audits).filter(a => a.scoreDisplayMode === 'informative');
-
-  const levels = classifyByLevel(failed, a => a.description || '');
-
-  failed.forEach(a => {
-    if (!a.description.match(/wcag2a|wcag2aa|wcag2aaa/i)) {
-      console.log(`🔍 Indefinido (Lighthouse): ${a.id} | Descrição: ${a.description}`);
-    }
-  });
-
-  return {
-    violacoes: failed.length,
-    warnings: warnings.length,
-    erros: failed.map(a => a.id),
-    ...levels
-  };
-} catch (err) {
-  console.error(`❌ Erro no Lighthouse: ${err.message}`);
-  return { violacoes: 0, warnings: 0, erros: [], nivelA: 0, nivelAA: 0, nivelAAA: 0, indefinido: 0 };
+function detectLanguageAndStartCommand(repoPath) {
+ if (fs.existsSync(path.join(repoPath, 'package.json'))) {
+   const pkg = JSON.parse(fs.readFileSync(path.join(repoPath, 'package.json'), 'utf8'));
+   if (pkg.scripts && pkg.scripts.start) {
+     return { cmd: 'npm start', port: detectPortFromFiles(repoPath) || 3000 };
+   }
+   if (pkg.scripts && pkg.scripts.dev) {
+     return { cmd: 'npm run dev', port: detectPortFromFiles(repoPath) || 3000 };
+   }
+ }
+ if (fs.existsSync(path.join(repoPath, 'manage.py'))) {
+   return { cmd: 'python manage.py runserver', port: 8000 };
+ }
+ if (fs.existsSync(path.join(repoPath, 'composer.json'))) {
+   return { cmd: 'php artisan serve', port: 8000 };
+ }
+ if (fs.existsSync(path.join(repoPath, 'pom.xml'))) {
+   return { cmd: './mvnw spring-boot:run', port: 8080 };
+ }
+ return null;
 }
+
+function detectPortFromFiles(repoPath) {
+ const envPath = path.join(repoPath, '.env');
+ if (fs.existsSync(envPath)) {
+   const envContent = fs.readFileSync(envPath, 'utf8');
+   const match = envContent.match(/PORT\s*=\s*(\d+)/i);
+   if (match) return parseInt(match[1], 10);
+ }
+ const pkgPath = path.join(repoPath, 'package.json');
+ if (fs.existsSync(pkgPath)) {
+   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+   if (pkg.scripts && pkg.scripts.start) {
+     const match = pkg.scripts.start.match(/PORT\s*=\s*(\d+)/i) || pkg.scripts.start.match(/--port\s+(\d+)/i);
+     if (match) return parseInt(match[1], 10);
+   }
+ }
+ return null;
+}
+
+async function saveCsv(results) {
+ const csvWriter = createCsvWriter({
+   path: 'resultados_acessibilidade.csv',
+   header: [
+     { id: 'repositorio', title: 'Repositorio' },
+     { id: 'status', title: 'Status' },
+     { id: 'metodo_execucao', title: 'MetodoExecucao' },
+     { id: 'motivo_fail', title: 'MotivoFail' },
+     { id: 'violacoes_total', title: 'ViolacoesTotal' },
+     { id: 'warnings_total', title: 'WarningsTotal' },
+     { id: 'violacoes_A', title: 'ViolacoesA' },
+     { id: 'violacoes_AA', title: 'ViolacoesAA' },
+     { id: 'violacoes_AAA', title: 'ViolacoesAAA' },
+     { id: 'violacoes_indefinido', title: 'ViolacoesIndefinido' },
+     { id: 'criterios_total', title: 'WCAG_CriteriosTotal' },
+     { id: 'criterios_automatizaveis', title: 'WCAG_CriteriosAutomatizaveis' },
+     { id: 'taxa_sucesso_acessibilidade', title: 'TaxaSucessoAcessibilidade' }
+   ]
+ });
+ await csvWriter.writeRecords(results);
+ console.log('📄 Resultados salvos em resultados_acessibilidade.csv');
 }
 
 (async () => {
-const results = [];
-const toolErrorsMap = {}; // Erros distintos por ferramenta
+ const repos = [];
+ fs.createReadStream('filtrados.csv')
+   .pipe(csv({ separator: '|', mapHeaders: ({ header }) => header.trim() }))
+   .on('data', (row) => {
+     if (row['AXE'] && row['AXE'].trim() === 'true') {
+       repos.push(row['Repositório'].trim());
+     }
+   })
+   .on('end', async () => {
+     console.log(`📊 Total de repositórios para testar: ${repos.length}`);
+     const results = [];
 
-// Testar URL antes de rodar
-try {
-  console.log(`🌐 Testando acesso à URL: ${urlApp}`);
-  const testRes = await fetch(urlApp, { timeout: 10000 });
-  if (!testRes.ok) {
-    console.error(`❌ URL inacessível: ${testRes.status} ${testRes.statusText}`);
-  } else {
-    console.log(`✅ URL acessível (${testRes.status})`);
-  }
-} catch (err) {
-  console.error(`❌ Erro ao acessar URL: ${err.message}`);
-}
+     for (const repoName of repos) {
+       console.log(`🔍 Processando ${repoName}`);
+       let metodo_execucao = 'FAIL';
+       let motivo_fail = '';
 
-if (!urlApp) {
-  console.log("Detectando porta local...");
-  let localUrl = await detectLocalUrl();
-  if (!localUrl) {
-    console.log("Nenhuma porta padrão detectada, tentando ler .env e package.json...");
-    const repoPath = path.join(process.cwd(), 'target-repo');
-    let portaEnv = detectPortFromEnv(repoPath);
-    let portaPkg = detectPortFromPackageJson(repoPath);
-    const portaCustom = portaEnv || portaPkg;
-    if (portaCustom) localUrl = `http://localhost:${portaCustom}`;
-  }
-  if (localUrl) {
-    console.log(`Servidor detectado em ${localUrl}`);
-    urlApp = localUrl;
-  } else {
-    console.log("Nenhum servidor detectado. Marcando como FAIL.");
-    tools.forEach(tool => {
-      results.push({
-        repositorio: repoName,
-        ferramenta: tool,
-        status: 'FAIL',
-        violacoes_total: null,
-        warnings_total: null,
-        violacoes_A: null,
-        violacoes_AA: null,
-        violacoes_AAA: null,
-        violacoes_indefinido: null,
-        cer: null,
-        taxa_sucesso_acessibilidade: null
-      });
-    });
-    await saveCsv(results);
-    process.exit(0);
-  }
-}
+       try {
+         let urlApp = await getHomepageFromGitHub(repoName);
 
-for (const tool of tools) {
-  try {
-    let res;
-    if (tool === 'AXE') {
-      res = await runAxe(urlApp);
-    } else if (tool === 'Lighthouse') {
-      res = await runLighthouse(urlApp);
-    } else {
-      continue;
-    }
+         if (urlApp) {
+           metodo_execucao = 'URL';
+           const res = await runAxe(urlApp);
+           results.push({
+             repositorio: repoName,
+             status: 'OK',
+             metodo_execucao,
+             motivo_fail: '',
+             violacoes_total: res.violacoes,
+             warnings_total: res.warnings,
+             violacoes_A: res.nivelA,
+             violacoes_AA: res.nivelAA,
+             violacoes_AAA: res.nivelAAA,
+             violacoes_indefinido: res.indefinido,
+             criterios_total: WCAG_TOTAL_CRITERIA,
+             criterios_automatizaveis: WCAG_AUTOMATIZAVEL,
+             taxa_sucesso_acessibilidade: ((WCAG_AUTOMATIZAVEL - res.violacoes) / WCAG_AUTOMATIZAVEL).toFixed(2)
+           });
+           continue;
+         }
 
-    toolErrorsMap[tool] = new Set(res.erros);
+         console.log(`📥 Clonando ${repoName}...`);
+         execSync(`rm -rf target-repo && git clone --depth=1 https://github.com/${repoName}.git target-repo`, { stdio: 'inherit' });
+         const repoPath = path.join(process.cwd(), 'target-repo');
+         const startInfo = detectLanguageAndStartCommand(repoPath);
 
-    results.push({
-      repositorio: repoName,
-      ferramenta: tool,
-      status: 'OK',
-      violacoes_total: res.violacoes,
-      warnings_total: res.warnings || 0,
-      violacoes_A: res.nivelA,
-      violacoes_AA: res.nivelAA,
-      violacoes_AAA: res.nivelAAA,
-      violacoes_indefinido: res.indefinido,
-      cer: 0, // será calculado depois
-      taxa_sucesso_acessibilidade: ((WCAG_AUTOMATIZAVEL - res.violacoes) / WCAG_AUTOMATIZAVEL).toFixed(2)
-    });
-  } catch (err) {
-    console.error(`❌ Erro na ferramenta ${tool}: ${err.message}`);
-    results.push({
-      repositorio: repoName,
-      ferramenta: tool,
-      status: 'FAIL',
-      violacoes_total: null,
-      warnings_total: null,
-      violacoes_A: null,
-      violacoes_AA: null,
-      violacoes_AAA: null,
-      violacoes_indefinido: null,
-      cer: null,
-      taxa_sucesso_acessibilidade: null
-    });
-  }
-}
+         if (!startInfo) throw new Error('Não foi possível detectar linguagem/comando de start');
 
-// Calcula CER conforme fórmula do artigo
-const allErrorsGlobal = new Set();
-Object.values(toolErrorsMap).forEach(set => {
-  set.forEach(err => allErrorsGlobal.add(err));
-});
+         console.log(`🚀 Iniciando servidor: ${startInfo.cmd}`);
+         const server = spawn(startInfo.cmd, { shell: true, cwd: repoPath, stdio: 'inherit' });
+         await new Promise(resolve => setTimeout(resolve, 15000));
 
-results.forEach(r => {
-  if (r.status === 'OK' && allErrorsGlobal.size > 0) {
-    const toolSet = toolErrorsMap[r.ferramenta] || new Set();
-    r.cer = (toolSet.size / allErrorsGlobal.size).toFixed(2);
-  }
-});
+         urlApp = `http://localhost:${startInfo.port}`;
+         metodo_execucao = 'Clonagem';
+         const res = await runAxe(urlApp);
 
-await saveCsv(results);
+         results.push({
+           repositorio: repoName,
+           status: 'OK',
+           metodo_execucao,
+           motivo_fail: '',
+           violacoes_total: res.violacoes,
+           warnings_total: res.warnings,
+           violacoes_A: res.nivelA,
+           violacoes_AA: res.nivelAA,
+           violacoes_AAA: res.nivelAAA,
+           violacoes_indefinido: res.indefinido,
+           criterios_total: WCAG_TOTAL_CRITERIA,
+           criterios_automatizaveis: WCAG_AUTOMATIZAVEL,
+           taxa_sucesso_acessibilidade: ((WCAG_AUTOMATIZAVEL - res.violacoes) / WCAG_AUTOMATIZAVEL).toFixed(2)
+         });
+
+         server.kill();
+       } catch (err) {
+         console.error(`❌ Falha em ${repoName}: ${err.message}`);
+         results.push({
+           repositorio: repoName,
+           status: 'FAIL',
+           metodo_execucao,
+           motivo_fail: err.message,
+           violacoes_total: null,
+           warnings_total: null,
+           violacoes_A: null,
+           violacoes_AA: null,
+           violacoes_AAA: null,
+           violacoes_indefinido: null,
+           criterios_total: WCAG_TOTAL_CRITERIA,
+           criterios_automatizaveis: WCAG_AUTOMATIZAVEL,
+           taxa_sucesso_acessibilidade: null
+         });
+       }
+     }
+
+     await saveCsv(results);
+   });
 })();
-
-async function saveCsv(results) {
-const csvWriter = createCsvWriter({
-  path: 'resultados_acessibilidade.csv',
-  header: [
-    { id: 'repositorio', title: 'Repositorio' },
-    { id: 'ferramenta', title: 'Ferramenta' },
-    { id: 'status', title: 'Status' },
-    { id: 'violacoes_total', title: 'ViolacoesTotal' },
-    { id: 'warnings_total', title: 'WarningsTotal' },
-    { id: 'violacoes_A', title: 'ViolacoesA' },
-    { id: 'violacoes_AA', title: 'ViolacoesAA' },
-    { id: 'violacoes_AAA', title: 'ViolacoesAAA' },
-    { id: 'violacoes_indefinido', title: 'ViolacoesIndefinido' },
-    { id: 'cer', title: 'CER' },
-    { id: 'taxa_sucesso_acessibilidade', title: 'TaxaSucessoAcessibilidade' }
-  ]
-});
-await csvWriter.writeRecords(results);
-console.log('📄 Resultados salvos em resultados_acessibilidade.csv');
-}

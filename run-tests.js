@@ -1,7 +1,7 @@
 const fs = require('fs');
-const path = require('path');
+const { execSync, spawn } = require('child_process');
 const puppeteer = require('puppeteer');
-const detectPort = require('detect-port');
+const fetch = require('node-fetch');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 
 /**
@@ -21,6 +21,78 @@ const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 const WCAG_TOTAL_CRITERIA = 58;
 const WCAG_AUTOMATIZAVEL = Math.round(WCAG_TOTAL_CRITERIA * 0.44); // ~26 critérios
 
+// ----------------------
+// Lógica de múltiplos tokens (igual ao minerador)
+// ----------------------
+const tokens = [
+ process.env.TOKEN_1,
+ process.env.TOKEN_2,
+ process.env.TOKEN_3
+].filter(Boolean);
+
+let tokenIndex = 0;
+let token = tokens[0];
+let tokenLimits = Array(tokens.length).fill(null);
+
+function nextToken() {
+ tokenIndex = (tokenIndex + 1) % tokens.length;
+ token = tokens[tokenIndex];
+}
+
+function switchTokenIfNeeded(rateLimit) {
+ if (rateLimit !== null && rateLimit <= 0) {
+   let startIndex = tokenIndex;
+   let found = false;
+   for (let i = 1; i <= tokens.length; i++) {
+     let nextIndex = (startIndex + i) % tokens.length;
+     if (!tokenLimits[nextIndex] || tokenLimits[nextIndex] > 0) {
+       tokenIndex = nextIndex;
+       token = tokens[tokenIndex];
+       found = true;
+       break;
+     }
+   }
+   if (!found) {
+     console.log('⏳ Todos os tokens atingiram o rate limit. Aguardando reset...');
+   }
+ }
+}
+
+async function makeRestRequest(url) {
+ const options = {
+   headers: {
+     "User-Agent": "GitHub-Accessibility-Runner",
+     Accept: "application/vnd.github.v3+json",
+     Authorization: `token ${token}`,
+   },
+   timeout: 20000,
+ };
+
+ const response = await fetch(url, options);
+ const rateLimit = parseInt(response.headers.get("x-ratelimit-remaining"));
+ const resetTime = parseInt(response.headers.get("x-ratelimit-reset"));
+ tokenLimits[tokenIndex] = rateLimit;
+
+ if (rateLimit < 50 && tokens.length > 1) {
+   nextToken();
+   tokenLimits[tokenIndex] = null;
+   console.log(`🔄 Trocando para o próximo token (REST), rate limit baixo: ${rateLimit}`);
+ }
+
+ switchTokenIfNeeded(rateLimit);
+
+ if (rateLimit < 50 && tokens.length <= 1) {
+   const waitTime = Math.max(resetTime * 1000 - Date.now() + 5000, 0);
+   console.log(`⏳ Rate limit REST baixo (${rateLimit}), aguardando ${Math.ceil(waitTime / 1000)}s...`);
+   await new Promise((resolve) => setTimeout(resolve, waitTime));
+ }
+
+ return await response.json();
+}
+
+// ----------------------
+// Funções AXE
+// ----------------------
 function classifyByLevel(errors, extractor) {
 let nivelA = 0, nivelAA = 0, nivelAAA = 0, indefinido = 0;
 errors.forEach(err => {
@@ -38,17 +110,6 @@ errors.forEach(err => {
   }
 });
 return { nivelA, nivelAA, nivelAAA, indefinido };
-}
-
-async function detectLocalUrl() {
-const portasComuns = [3000, 5000, 8080];
-for (const porta of portasComuns) {
-  const livre = await detectPort(porta);
-  if (livre !== porta) {
-    return `http://localhost:${porta}`;
-  }
-}
-return null;
 }
 
 async function runAxe(url) {
@@ -78,16 +139,72 @@ try {
   };
 } catch (err) {
   console.error(`❌ Erro no AXE/Puppeteer: ${err.message}`);
-  return { violacoes: 0, warnings: 0, erros: [], nivelA: 0, nivelAA: 0, nivelAAA: 0, indefinido: 0 };
+  return null;
 }
 }
 
+// ----------------------
+// Buscar homepage usando API com lógica de tokens
+// ----------------------
+async function getHomepage(repoFullName) {
+ try {
+   const data = await makeRestRequest(`https://api.github.com/repos/${repoFullName}`);
+   return data.homepage || null;
+ } catch (err) {
+   console.error(`❌ Erro ao buscar homepage: ${err.message}`);
+   return null;
+ }
+}
+
+// ----------------------
+// Detectar linguagem e rodar localmente
+// ----------------------
+function detectLanguage(repoPath) {
+if (fs.existsSync(`${repoPath}/package.json`)) return 'node';
+if (fs.existsSync(`${repoPath}/requirements.txt`)) return 'python';
+if (fs.existsSync(`${repoPath}/composer.json`)) return 'php';
+if (fs.existsSync(`${repoPath}/pom.xml`)) return 'java-maven';
+if (fs.existsSync(`${repoPath}/build.gradle`)) return 'java-gradle';
+return 'unknown';
+}
+
+function startServer(repoPath, lang) {
+try {
+  switch (lang) {
+    case 'node':
+      execSync('npm install', { cwd: repoPath, stdio: 'inherit' });
+      return spawn('npm', ['start'], { cwd: repoPath, stdio: 'inherit' });
+    case 'python':
+      execSync('pip install -r requirements.txt', { cwd: repoPath, stdio: 'inherit' });
+      return spawn('python', ['app.py'], { cwd: repoPath, stdio: 'inherit' });
+    case 'php':
+      execSync('composer install', { cwd: repoPath, stdio: 'inherit' });
+      return spawn('php', ['-S', 'localhost:8080', '-t', 'public'], { cwd: repoPath, stdio: 'inherit' });
+    case 'java-maven':
+      execSync('mvn install', { cwd: repoPath, stdio: 'inherit' });
+      return spawn('mvn', ['spring-boot:run'], { cwd: repoPath, stdio: 'inherit' });
+    case 'java-gradle':
+      execSync('./gradlew build', { cwd: repoPath, stdio: 'inherit' });
+      return spawn('./gradlew', ['bootRun'], { cwd: repoPath, stdio: 'inherit' });
+    default:
+      console.error('⚠️ Linguagem desconhecida, não foi possível iniciar servidor.');
+      return null;
+  }
+} catch (err) {
+  console.error(`❌ Erro ao iniciar servidor: ${err.message}`);
+  return null;
+}
+}
+
+// ----------------------
+// Salvar CSV
+// ----------------------
 async function saveCsv(results) {
 const csvWriter = createCsvWriter({
   path: 'resultados_acessibilidade.csv',
   header: [
     { id: 'repositorio', title: 'Repositorio' },
-    { id: 'ferramenta', title: 'Ferramenta' },
+    { id: 'metodo', title: 'Metodo' },
     { id: 'status', title: 'Status' },
     { id: 'violacoes_total', title: 'ViolacoesTotal' },
     { id: 'warnings_total', title: 'WarningsTotal' },
@@ -105,71 +222,84 @@ await csvWriter.writeRecords(results);
 console.log('📄 Resultados salvos em resultados_acessibilidade.csv');
 }
 
+// ----------------------
+// Execução principal
+// ----------------------
 (async () => {
-const repos = [];
-
-// 📌 Leitura adaptada para JSON
-const reposData = JSON.parse(fs.readFileSync('filtrados.json', 'utf8'));
-
-reposData.forEach(r => {
-  repos.push(r["Repositório"]);
-});
-
-console.log(`📊 Total de repositórios para testar: ${repos.length}`);
-
+const reposData = JSON.parse(fs.readFileSync('repositorios.json', 'utf8'));
 const results = [];
 const toolErrorsMap = {};
 
-for (const repoName of repos) {
-  try {
-    const urlApp = await detectLocalUrl();
-    if (!urlApp) {
-      results.push({
-        repositorio: repoName,
-        ferramenta: 'AXE',
-        status: 'FAIL',
-        violacoes_total: null,
-        warnings_total: null,
-        violacoes_A: null,
-        violacoes_AA: null,
-        violacoes_AAA: null,
-        violacoes_indefinido: null,
-        criterios_total: WCAG_TOTAL_CRITERIA,
-        criterios_automatizaveis: WCAG_AUTOMATIZAVEL,
-        cer: null,
-        taxa_sucesso_acessibilidade: null
-      });
-      continue;
+for (const repo of reposData) {
+  const repoName = repo["Repositório"];
+  let metodo = '';
+  let res = null;
+
+  // Primeira tentativa: homepage
+  const homepage = await getHomepage(repoName);
+  if (homepage) {
+    metodo = 'homepage';
+    res = await runAxe(homepage);
+  }
+
+  // Segunda tentativa: clonar e rodar
+  if (!res) {
+    metodo = 'clonado';
+    const repoPath = `./temp/${repoName.replace('/', '_')}`;
+    try {
+      execSync(`git clone --depth=1 https://github.com/${repoName}.git ${repoPath}`, { stdio: 'inherit' });
+      const lang = detectLanguage(repoPath);
+      const server = startServer(repoPath, lang);
+      if (server) {
+        await new Promise(r => setTimeout(r, 15000));
+        res = await runAxe('http://localhost:8080');
+        server.kill();
+      }
+    } catch (err) {
+      console.error(`❌ Erro ao clonar/rodar ${repoName}: ${err.message}`);
     }
+  }
 
-    const res = await runAxe(urlApp);
-    toolErrorsMap['AXE'] = new Set(res.erros);
-
+  if (!res) {
+    metodo = metodo || 'falhou';
     results.push({
       repositorio: repoName,
-      ferramenta: 'AXE',
-      status: 'OK',
-      violacoes_total: res.violacoes,
-      warnings_total: res.warnings,
-      violacoes_A: res.nivelA,
-      violacoes_AA: res.nivelAA,
-      violacoes_AAA: res.nivelAAA,
-      violacoes_indefinido: res.indefinido,
+      metodo,
+      status: 'FAIL',
+      violacoes_total: null,
+      warnings_total: null,
+      violacoes_A: null,
+      violacoes_AA: null,
+      violacoes_AAA: null,
+      violacoes_indefinido: null,
       criterios_total: WCAG_TOTAL_CRITERIA,
       criterios_automatizaveis: WCAG_AUTOMATIZAVEL,
-      cer: 0, // será calculado depois
-      taxa_sucesso_acessibilidade: ((WCAG_AUTOMATIZAVEL - res.violacoes) / WCAG_AUTOMATIZAVEL).toFixed(2)
+      cer: null,
+      taxa_sucesso_acessibilidade: null
     });
-  } catch (err) {
-    console.error(`❌ Erro no repo ${repoName}: ${err.message}`);
+    continue;
   }
+
+  toolErrorsMap['AXE'] = new Set(res.erros);
+
+  results.push({
+    repositorio: repoName,
+    metodo,
+    status: 'OK',
+    violacoes_total: res.violacoes,
+    warnings_total: res.warnings,
+    violacoes_A: res.nivelA,
+    violacoes_AA: res.nivelAA,
+    violacoes_AAA: res.nivelAAA,
+    violacoes_indefinido: res.indefinido,
+    criterios_total: WCAG_TOTAL_CRITERIA,
+    criterios_automatizaveis: WCAG_AUTOMATIZAVEL,
+    cer: 0,
+    taxa_sucesso_acessibilidade: ((WCAG_AUTOMATIZAVEL - res.violacoes) / WCAG_AUTOMATIZAVEL).toFixed(2)
+  });
 }
 
-// 📌 Cálculo do CER
-// Fórmula: CER = erros únicos da ferramenta / erros únicos de todas as ferramentas
-// Por hora, como estamos usando apenas uma ferramenta (AXE),
-// o conjunto global de erros é igual ao conjunto da ferramenta,
-// então o CER sempre será 1.00 (100%).
+// Cálculo CER
 const allErrorsGlobal = new Set();
 Object.values(toolErrorsMap).forEach(set => {
   set.forEach(err => allErrorsGlobal.add(err));
@@ -177,7 +307,7 @@ Object.values(toolErrorsMap).forEach(set => {
 
 results.forEach(r => {
   if (r.status === 'OK' && allErrorsGlobal.size > 0) {
-    const toolSet = toolErrorsMap[r.ferramenta] || new Set();
+    const toolSet = toolErrorsMap['AXE'] || new Set();
     r.cer = (toolSet.size / allErrorsGlobal.size).toFixed(2);
   }
 });

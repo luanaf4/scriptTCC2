@@ -173,59 +173,59 @@ return 'unknown';
 // ----------------------
 // Iniciar servidor local
 // ----------------------
-function startServer(repoPath, lang) {
-try {
-  switch (lang) {
-    case 'node':
-      execSync('npm install', { cwd: repoPath, stdio: 'inherit' });
-      return spawn('npm', ['start'], { cwd: repoPath, stdio: 'inherit' });
-    case 'python':
-      execSync('pip install -r requirements.txt', { cwd: repoPath, stdio: 'inherit' });
-      return spawn('python', ['app.py'], { cwd: repoPath, stdio: 'inherit' });
-    case 'php':
-      execSync('composer install', { cwd: repoPath, stdio: 'inherit' });
-      return spawn('php', ['-S', 'localhost:8080', '-t', 'public'], { cwd: repoPath, stdio: 'inherit' });
-    case 'java-maven':
-      execSync('mvn install', { cwd: repoPath, stdio: 'inherit' });
-      return spawn('mvn', ['spring-boot:run'], { cwd: repoPath, stdio: 'inherit' });
-    case 'java-gradle':
-      execSync('./gradlew build', { cwd: repoPath, stdio: 'inherit' });
-      return spawn('./gradlew', ['bootRun'], { cwd: repoPath, stdio: 'inherit' });
-    default:
-      console.error('⚠️ Linguagem desconhecida, não foi possível iniciar servidor.');
-      return null;
-  }
-} catch (err) {
-  console.error(`❌ Erro ao iniciar servidor: ${err.message}`);
-  return null;
-}
-}
+// function startServer(repoPath, lang) {
+// try {
+//   switch (lang) {
+//     case 'node':
+//       execSync('npm install', { cwd: repoPath, stdio: 'inherit' });
+//       return spawn('npm', ['start'], { cwd: repoPath, stdio: 'inherit' });
+//     case 'python':
+//       execSync('pip install -r requirements.txt', { cwd: repoPath, stdio: 'inherit' });
+//       return spawn('python', ['app.py'], { cwd: repoPath, stdio: 'inherit' });
+//     case 'php':
+//       execSync('composer install', { cwd: repoPath, stdio: 'inherit' });
+//       return spawn('php', ['-S', 'localhost:8080', '-t', 'public'], { cwd: repoPath, stdio: 'inherit' });
+//     case 'java-maven':
+//       execSync('mvn install', { cwd: repoPath, stdio: 'inherit' });
+//       return spawn('mvn', ['spring-boot:run'], { cwd: repoPath, stdio: 'inherit' });
+//     case 'java-gradle':
+//       execSync('./gradlew build', { cwd: repoPath, stdio: 'inherit' });
+//       return spawn('./gradlew', ['bootRun'], { cwd: repoPath, stdio: 'inherit' });
+//     default:
+//       console.error('⚠️ Linguagem desconhecida, não foi possível iniciar servidor.');
+//       return null;
+//   }
+// } catch (err) {
+//   console.error(`❌ Erro ao iniciar servidor: ${err.message}`);
+//   return null;
+// }
+// }
 
 // ----------------------
 // Detectar porta local
 // ----------------------
-async function detectLocalUrl(repoPath) {
- const portasComuns = [3000, 5000, 8080, 4200, 5173];
- for (const porta of portasComuns) {
-   const livre = await detectPort(porta);
-   if (livre !== porta) {
-     return `http://localhost:${porta}`;
-   }
- }
+// async function detectLocalUrl(repoPath) {
+//  const portasComuns = [3000, 5000, 8080, 4200, 5173];
+//  for (const porta of portasComuns) {
+//    const livre = await detectPort(porta);
+//    if (livre !== porta) {
+//      return `http://localhost:${porta}`;
+//    }
+//  }
  // Busca em arquivos
- const filesToCheck = ['.env', 'package.json', 'vite.config.js', 'angular.json', 'webpack.config.js'];
- for (const file of filesToCheck) {
-   const filePath = path.join(repoPath, file);
-   if (fs.existsSync(filePath)) {
-     const content = fs.readFileSync(filePath, 'utf8');
-     const match = content.match(/PORT\s*=?\s*(\d{2,5})/i) || content.match(/--port\s+(\d{2,5})/i);
-     if (match) {
-       return `http://localhost:${match[1]}`;
-     }
-   }
- }
- return null;
-}
+//  const filesToCheck = ['.env', 'package.json', 'vite.config.js', 'angular.json', 'webpack.config.js'];
+//  for (const file of filesToCheck) {
+//    const filePath = path.join(repoPath, file);
+//    if (fs.existsSync(filePath)) {
+//      const content = fs.readFileSync(filePath, 'utf8');
+//      const match = content.match(/PORT\s*=?\s*(\d{2,5})/i) || content.match(/--port\s+(\d{2,5})/i);
+//      if (match) {
+//        return `http://localhost:${match[1]}`;
+//      }
+//    }
+//  }
+//  return null;
+// }
 
 // ----------------------
 // Salvar CSV

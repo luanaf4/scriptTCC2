@@ -2,6 +2,10 @@ name: Accessibility All Repos Test (Only AXE)
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/accessibility-run-tools.yml
+      - run-tests.js
 
 jobs:
   run-tests:
@@ -18,7 +22,6 @@ jobs:
             git \
             unzip \
             curl \
-            default-mysql-client \
             python3 \
             python3-pip \
             php \
@@ -58,15 +61,11 @@ jobs:
 
       - name: Install Node.js dependencies
         run: |
-          npm install axe-core puppeteer node-fetch@2 csv-writer csv-parser detect-port
+          npm install axe-core puppeteer node-fetch@2 csv-writer detect-port
 
-      - name: Run accessibility tests for all repos
+      - name: Run accessibility tests
         run: |
           node run-tests.js
-        env:
-          TOKEN_1: ${{ secrets.TOKEN_1 }}
-          TOKEN_2: ${{ secrets.TOKEN_2 }}
-          TOKEN_3: ${{ secrets.TOKEN_3 }}
 
       - name: Upload CSV results
         uses: actions/upload-artifact@v4

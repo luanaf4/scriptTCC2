@@ -62,7 +62,7 @@ jobs:
 
       - name: Run accessibility tests for all repos
         run: |
-          node run-tests-all.js
+          node run-tests.js
         env:
           TOKEN_1: ${{ secrets.TOKEN_1 }}
           TOKEN_2: ${{ secrets.TOKEN_2 }}

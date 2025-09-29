@@ -18,8 +18,7 @@ const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 * Esse fator é mantido para WCAG 2.2 por similaridade, mas idealmente deveria ser recalculado
 * com base em um mapeamento atualizado dos critérios 2.2.
 */
-const repoFile = 'filtrados.csv';
-const WCAG_TOTAL_CRITERIA = 58; // WCAG 2.2
+const WCAG_TOTAL_CRITERIA = 58;
 const WCAG_AUTOMATIZAVEL = Math.round(WCAG_TOTAL_CRITERIA * 0.44); // ~26 critérios
 
 function classifyByLevel(errors, extractor) {
@@ -110,17 +109,20 @@ async function saveCsv(results) {
  const repos = [];
 
  // 📌 Leitura adaptada para Markdown
- const lines = fs.readFileSync(repoFile, 'utf8').split('\n');
- for (const line of lines) {
-   if (line.startsWith('|') && !line.includes('---')) {
+ const lines = fs.readFileSync('filtrados.csv', 'utf8').split('\n');
+ const headerLine = lines.find(line => line.startsWith('|') && !line.includes('---'));
+ const headers = headerLine.split('|').map(h => h.trim());
+ const repoIndex = headers.indexOf('Repositório');
+ const axeIndex = headers.indexOf('AXE');
+
+ lines.forEach(line => {
+   if (line.startsWith('|') && !line.includes('---') && line !== headerLine) {
      const cols = line.split('|').map(c => c.trim());
-     const repoName = cols[1];
-     const axeValue = cols[4];
-     if (axeValue && axeValue.toLowerCase() === 'true') {
-       repos.push(repoName);
+     if (cols[axeIndex].toLowerCase() === 'true') {
+       repos.push(cols[repoIndex]);
      }
    }
- }
+ });
 
  console.log(`📊 Total de repositórios para testar: ${repos.length}`);
 

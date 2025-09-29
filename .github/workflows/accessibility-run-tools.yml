@@ -5,7 +5,7 @@ on:
 
 jobs:
   run-tests:
-    runs-on: ubuntu-22.04  # Fixando versão para evitar mudanças de pacotes
+    runs-on: ubuntu-22.04  # Fixando versão para evitar mudanças inesperadas
 
     steps:
       - name: Checkout workflow repo
@@ -14,15 +14,40 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git unzip curl default-mysql-client chromium \
-            python3 python3-pip php composer openjdk-17-jdk maven \
-            libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
-            libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
-            libxrandr2 libgbm1 libasound2 libpangocairo-1.0-0 libpango-1.0-0 \
-            libgtk-3-0 libx11-xcb1 libxrender1 libxcursor1 libxi6 libxtst6 \
-            libxss1 libxshmfence1
-          export CHROME_PATH=$(which chromium)
-          echo "CHROME_PATH=$(which chromium)" >> $GITHUB_ENV
+          sudo apt-get install -y \
+            git \
+            unzip \
+            curl \
+            default-mysql-client \
+            python3 \
+            python3-pip \
+            php \
+            composer \
+            openjdk-17-jdk \
+            maven \
+            libnss3 \
+            libnspr4 \
+            libatk1.0-0 \
+            libatk-bridge2.0-0 \
+            libcups2 \
+            libdrm2 \
+            libxkbcommon0 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxfixes3 \
+            libxrandr2 \
+            libgbm1 \
+            libasound2 \
+            libpangocairo-1.0-0 \
+            libpango-1.0-0 \
+            libgtk-3-0 \
+            libx11-xcb1 \
+            libxrender1 \
+            libxcursor1 \
+            libxi6 \
+            libxtst6 \
+            libxss1 \
+            libxshmfence1
 
       - name: Install Node.js 18
         run: |

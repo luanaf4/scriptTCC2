@@ -9,7 +9,7 @@ on:
 
 jobs:
   run-tests:
-    runs-on: ubuntu-22.04  # Fixando versão para evitar mudanças inesperadas
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout workflow repo
@@ -19,38 +19,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            git \
-            unzip \
-            curl \
-            python3 \
-            python3-pip \
-            php \
-            composer \
-            openjdk-17-jdk \
-            maven \
-            libnss3 \
-            libnspr4 \
-            libatk1.0-0 \
-            libatk-bridge2.0-0 \
-            libcups2 \
-            libdrm2 \
-            libxkbcommon0 \
-            libxcomposite1 \
-            libxdamage1 \
-            libxfixes3 \
-            libxrandr2 \
-            libgbm1 \
-            libasound2 \
-            libpangocairo-1.0-0 \
-            libpango-1.0-0 \
-            libgtk-3-0 \
-            libx11-xcb1 \
-            libxrender1 \
-            libxcursor1 \
-            libxi6 \
-            libxtst6 \
-            libxss1 \
-            libxshmfence1
+            git unzip curl \
+            python3 python3-pip \
+            php composer \
+            openjdk-17-jdk maven gradle \
+            libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
+            libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 \
+            libasound2 libpangocairo-1.0-0 libpango-1.0-0 libgtk-3-0 \
+            libx11-xcb1 libxrender1 libxcursor1 libxi6 libxtst6 libxss1 libxshmfence1
 
       - name: Install Node.js 18
         run: |
@@ -61,9 +37,13 @@ jobs:
 
       - name: Install Node.js dependencies
         run: |
-          npm install axe-core puppeteer node-fetch@2 csv-writer detect-port
+          npm install axe-core puppeteer node-fetch@2 csv-writer
 
       - name: Run accessibility tests
+        env:
+          TOKEN_1: ${{ secrets.TOKEN_1 }}
+          TOKEN_2: ${{ secrets.TOKEN_2 }}
+          TOKEN_3: ${{ secrets.TOKEN_3 }}
         run: |
           node run-tests.js
 
